@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useSignMessage } from "wagmi";
+import { useAccount, useSignMessage, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { Brain, TrendingUp, Laugh, LineChart, Zap, ChevronRight, CheckCircle2, Copy } from "lucide-react";
+import agentNFTArtifact from "../../../artifacts/contracts/AgentNFT.sol/AgentNFT.json";
+import addresses from "../../lib/deployed-addresses.json";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,8 @@ const PERSONALITIES = [
 export default function MintPage() {
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
+  const { data: authHash, isPending: isAuthPending, writeContract } = useWriteContract();
+  const { isLoading: isAuthConfirming, isSuccess: isAuthConfirmed } = useWaitForTransactionReceipt({ hash: authHash });
 
   const [step, setStep] = useState(1);
   const [personality, setPersonality] = useState(PERSONALITIES[0]);
@@ -325,12 +329,38 @@ export default function MintPage() {
             </div>
           </div>
 
-          <button 
-            className="w-full flex justify-center py-5 bg-white hover:bg-gray-200 text-black font-black text-lg uppercase tracking-widest rounded-md border-2 border-transparent shadow-[4px_4px_0px_rgba(255,255,255,0.4)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[6px_6px_0px_rgba(255,255,255,0.6)] transition-all cursor-pointer"
-            onClick={() => window.location.href = '/dashboard'}
-          >
-            Enter Command Center
-          </button>
+          {!isAuthConfirmed ? (
+             <div className="mb-6 p-5 border-2 border-red-500 bg-red-950/30 rounded-md shadow-[inset_2px_2px_0px_rgba(239,68,68,0.2)]">
+               <h4 className="text-red-400 font-black mb-2 uppercase tracking-widest text-sm">Action Required</h4>
+               <p className="text-sm text-white/90 mb-6 font-medium">You must authorize the server to automatically broadcast posts on behalf of your agent to the 0G Network.</p>
+               <button 
+                 onClick={() => {
+                   writeContract({
+                     address: addresses.AgentNFT as `0x${string}`,
+                     abi: agentNFTArtifact.abi,
+                     functionName: 'authorizeUsage',
+                     args: [BigInt(result.agent.agentId), "0x6639edb90BA4407a36E0d8ce2d9168A0d4844776", "0x"],
+                   });
+                 }}
+                 disabled={isAuthPending || isAuthConfirming}
+                 className="w-full flex justify-center py-4 bg-red-600 hover:bg-red-500 disabled:bg-red-900/50 text-white font-black text-sm uppercase tracking-widest rounded-md border-2 border-red-400 shadow-[4px_4px_0px_rgba(239,68,68,0.4)] disabled:shadow-none hover:-translate-y-[1px] hover:-translate-x-[1px] hover:shadow-[6px_6px_0px_rgba(239,68,68,0.6)] transition-all cursor-pointer"
+               >
+                 {isAuthPending || isAuthConfirming ? "Confirming Transaction..." : "Authorize Relayer (Gas)"}
+               </button>
+             </div>
+           ) : (
+             <div className="mb-6 p-4 border-2 border-green-500 bg-green-950/30 rounded-md flex items-center gap-3 text-green-400 font-black text-sm tracking-widest uppercase shadow-[inset_2px_2px_0px_rgba(74,222,128,0.2)]">
+               <CheckCircle2 size={24} /> Relayer Authorized
+             </div>
+           )}
+
+           <button 
+             className="w-full flex justify-center py-5 bg-white hover:bg-gray-200 text-black font-black text-lg uppercase tracking-widest rounded-md border-2 border-transparent shadow-[4px_4px_0px_rgba(255,255,255,0.4)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[6px_6px_0px_rgba(255,255,255,0.6)] transition-all cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-x-0 disabled:translate-y-0"
+             onClick={() => window.location.href = '/dashboard'}
+             disabled={!isAuthConfirmed}
+           >
+             Enter Command Center
+           </button>
         </div>
       )}
     </div>
