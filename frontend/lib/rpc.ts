@@ -44,7 +44,14 @@ export async function getProvider(): Promise<ethers.JsonRpcProvider> {
   }
 
   // Last resort: return provider even if it might fail
-  const provider = new ethers.JsonRpcProvider(RPC_FALLBACK_LIST[0]);
+  const url = RPC_FALLBACK_LIST[0];
+  const provider = new ethers.JsonRpcProvider(url);
   _cachedProvider = provider;
+  _cachedUrl = url;
   return provider;
+}
+
+export async function getRpcUrl(): Promise<string> {
+  if (!_cachedUrl) await getProvider();
+  return _cachedUrl || RPC_FALLBACK_LIST[0];
 }

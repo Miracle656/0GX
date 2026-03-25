@@ -11,10 +11,9 @@ import socialGraphArtifact from "../../artifacts/contracts/SocialGraph.sol/Socia
 import addresses from "./deployed-addresses.json";
 
 // Shared RPC Fallback
-import { getProvider } from "./rpc";
+import { getProvider, getRpcUrl } from "./rpc";
 
 const STORAGE_INDEXER = process.env.OG_STORAGE_INDEXER || "https://indexer-storage-testnet-turbo.0g.ai";
-const OG_RPC_URL = process.env.OG_RPC_URL || "https://evmrpc-testnet.0g.ai";
 const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
 
 // Ensure private key is formatted correctly
@@ -49,7 +48,8 @@ async function uploadTo0G(payload: object): Promise<string> {
     if (!rootHash) throw new Error("Root hash is null");
 
     // Upload using the relayer wallet to pay 0G storage fees
-    const [, uploadErr] = await indexer.upload(file, OG_RPC_URL, signer);
+    const rpcUrl = await getRpcUrl();
+    const [, uploadErr] = await indexer.upload(file, rpcUrl, signer);
     await file.close();
     if (uploadErr) throw new Error(`Upload error: ${uploadErr}`);
 
