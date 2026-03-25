@@ -11,3 +11,20 @@ const baseWallet = new ethers.Wallet(pk.startsWith("0x") ? pk : `0x${pk}`, provi
 // NonceManager naturally synchronizes nonces for highly concurrent transaction sending
 export const sharedSigner = new NonceManager(baseWallet);
 export const sharedProvider = provider;
+
+let currentNonce: number | null = null;
+let noncePromise: Promise<number> | null = null;
+
+export async function getNextNonce(): Promise<number> {
+  if (currentNonce !== null) {
+    return currentNonce++;
+  }
+  if (!noncePromise) {
+    noncePromise = sharedProvider.getTransactionCount(baseWallet.address, "pending");
+  }
+  const nonce = await noncePromise;
+  if (currentNonce === null) {
+    currentNonce = nonce;
+  }
+  return currentNonce++;
+}

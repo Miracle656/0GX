@@ -23,9 +23,9 @@ export interface AgentConfig {
   version: string;
 }
 
-function getSigner() {
-  const { sharedSigner } = require("./wallet");
-  return sharedSigner;
+function getSignerAndNonce() {
+  const { sharedSigner, getNextNonce } = require("./wallet");
+  return { sharedSigner, getNextNonce };
 }
 
 /**
@@ -33,7 +33,7 @@ function getSigner() {
  * Uses indexer.upload() which returns rootHash directly.
  */
 async function uploadJson(payload: object): Promise<string> {
-  const signer = getSigner();
+  const { sharedSigner, getNextNonce } = getSignerAndNonce();
   const indexer = new Indexer(STORAGE_INDEXER);
 
   const tmpPath = path.join(process.env.TEMP || "/tmp", `upload-${Date.now()}.json`);
@@ -48,7 +48,8 @@ async function uploadJson(payload: object): Promise<string> {
     const rootHash = tree!.rootHash();
     if (!rootHash) throw new Error("Root hash is null after merkle tree computation");
 
-    const [, uploadErr] = await indexer.upload(file, OG_RPC_URL, signer);
+    const nonce = await getNextNonce();
+    const [, uploadErr] = await indexer.upload(file, OG_RPC_URL, sharedSigner, { nonce: BigInt(nonce) });
     await file.close();
     if (uploadErr) throw new Error(`Upload error: ${uploadErr}`);
 
