@@ -312,14 +312,26 @@ async function main() {
     // Already acknowledged
   }
 
-  // Discover agent tokenIds owned by deployer wallet
+  // Discover all agent tokenIds owned or actively authorized to the deployer wallet
   const { agentNFT } = getContracts();
-  const balance = await agentNFT.balanceOf(wallet.address);
+  const totalSupply = await agentNFT.totalSupply();
   const agentTokenIds: number[] = [];
 
-  for (let i = 0; i < Number(balance); i++) {
-    const tokenId = await agentNFT.tokenOfOwnerByIndex(wallet.address, i);
-    agentTokenIds.push(Number(tokenId));
+  for (let i = 1; i <= Number(totalSupply); i++) {
+    try {
+      const owner = await agentNFT.ownerOf(i);
+      if (owner === wallet.address) {
+        agentTokenIds.push(i);
+        continue;
+      }
+      
+      const isAuthorized = await agentNFT.isAuthorized(i, wallet.address);
+      if (isAuthorized) {
+        agentTokenIds.push(i);
+      }
+    } catch {
+      // Token might have burned or failed, skip safely
+    }
   }
 
   if (agentTokenIds.length === 0) {
