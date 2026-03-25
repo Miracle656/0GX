@@ -9,6 +9,7 @@ const provider = new ethers.JsonRpcProvider(OG_RPC_URL);
 const baseWallet = new ethers.Wallet(pk.startsWith("0x") ? pk : `0x${pk}`, provider);
 
 // NonceManager naturally synchronizes nonces for highly concurrent transaction sending
+export const sharedWallet = baseWallet;
 export const sharedSigner = new NonceManager(baseWallet);
 export const sharedProvider = provider;
 

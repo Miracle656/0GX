@@ -36,7 +36,7 @@ import addresses from "../frontend/lib/deployed-addresses.json";
 // ── Shared provider / wallet / contracts (singletons) ───────────────
 // Created once to avoid repeated JsonRpcProvider detection on every call
 
-import { sharedSigner, sharedProvider } from "./wallet";
+import { sharedSigner, sharedProvider, sharedWallet, getNextNonce } from "./wallet";
 
 const _contracts = {
   agentNFT:     new ethers.Contract(addresses.AgentNFT,      agentNFTArtifact.abi,      sharedSigner),
@@ -58,7 +58,7 @@ async function getWorkingProvider(): Promise<ethers.JsonRpcProvider> {
 }
 
 function getContracts() {
-  return { provider: sharedProvider, wallet: sharedSigner, ..._contracts };
+  return { provider: sharedProvider, wallet: sharedWallet, ..._contracts };
 }
 
 async function fetchRecentFeed(): Promise<FeedPost[]> {
@@ -120,7 +120,8 @@ async function executeAction(agentTokenId: number, action: AgentDecision): Promi
           ethers.toBeArray(BigInt("0x" + postRootHash.replace("0x", ""))),
           32
         );
-        await (await postRegistry.createPost(agentTokenId, rootHashBytes, 0)).wait();
+        const nonce = await getNextNonce();
+        await (await postRegistry.createPost(agentTokenId, rootHashBytes, 0, { nonce })).wait();
         console.log(`  [Agent ${agentTokenId}] Posted: "${action.content.substring(0, 60)}..."`);
         break;
       }
@@ -141,23 +142,36 @@ async function executeAction(agentTokenId: number, action: AgentDecision): Promi
           ethers.toBeArray(BigInt("0x" + postRootHash.replace("0x", ""))),
           32
         );
-        await (await postRegistry.createPost(agentTokenId, rootHashBytes, parsedTargetId)).wait();
+        const nonce = await getNextNonce();
+        await (await postRegistry.createPost(agentTokenId, rootHashBytes, parsedTargetId, { nonce })).wait();
         console.log(`  [Agent ${agentTokenId}] Commented on post ${parsedTargetId}`);
         break;
       }
 
       case "react": {
         if (!parsedTargetId || isNaN(parsedTargetId) || !action.reaction) break;
+        const { wallet } = getContracts();
+        
+        // Prevent "Already reacted" contract revert
+        const alreadyReacted = await postRegistry.hasReacted(parsedTargetId, wallet.address);
+        if (alreadyReacted) {
+          console.log(`  [Agent ${agentTokenId}] Skipped react — already reacted to post ${parsedTargetId}`);
+          break;
+        }
+
         const reactionMap: Record<string, number> = { upvote: 0, fire: 1, downvote: 2 };
         const reactionType = reactionMap[action.reaction] ?? 0;
-        await (await postRegistry.react(parsedTargetId, reactionType)).wait();
+        const nonce = await getNextNonce();
+        
+        await (await postRegistry.react(parsedTargetId, reactionType, { nonce })).wait();
         console.log(`  [Agent ${agentTokenId}] Reacted ${action.reaction} to post ${parsedTargetId}`);
         break;
       }
 
       case "follow": {
         if (!parsedTargetId || isNaN(parsedTargetId)) break;
-        await (await socialGraph.follow(agentTokenId, parsedTargetId)).wait();
+        const nonce = await getNextNonce();
+        await (await socialGraph.follow(agentTokenId, parsedTargetId, { nonce })).wait();
         console.log(`  [Agent ${agentTokenId}] Followed agent ${parsedTargetId}`);
         break;
       }
