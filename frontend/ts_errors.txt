@@ -1,0 +1,13 @@
+app/api/agent/memory/route.ts(35,56): error TS2345: Argument of type 'string' is not assignable to parameter of type 'AllowSharedBufferSource | undefined'.
+hooks/useAgentNFT.ts(32,33): error TS2365: Operator '>' cannot be applied to types '{}' and 'bigint'.
+hooks/useAgentNFT.ts(33,49): error TS2365: Operator '>' cannot be applied to types '{}' and 'bigint'.
+hooks/useAgentNFT.ts(45,9): error TS2322: Type '{ tokenId: {}; personalityTag: any; encryptedURI: any; metadataHash: any; originalCreator: any; cloneFee: any; mintedAt: any; } | null' is not assignable to type 'AgentNFTInfo | null'.
+  Type '{ tokenId: {}; personalityTag: any; encryptedURI: any; metadataHash: any; originalCreator: any; cloneFee: any; mintedAt: any; }' is not assignable to type 'AgentNFTInfo'.
+    Types of property 'tokenId' are incompatible.
+      Type '{}' is not assignable to type 'bigint'.
+hooks/useAgentNFT.ts(49,36): error TS2339: Property 'personalityTag' does not exist on type '{}'.
+hooks/useAgentNFT.ts(50,34): error TS2339: Property 'encryptedURI' does not exist on type '{}'.
+hooks/useAgentNFT.ts(51,34): error TS2339: Property 'metadataHash' does not exist on type '{}'.
+hooks/useAgentNFT.ts(52,37): error TS2339: Property 'originalCreator' does not exist on type '{}'.
+hooks/useAgentNFT.ts(53,30): error TS2339: Property 'cloneFee' does not exist on type '{}'.
+hooks/useAgentNFT.ts(54,30): error TS2339: Property 'mintedAt' does not exist on type '{}'.

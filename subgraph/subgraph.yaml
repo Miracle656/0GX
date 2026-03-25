@@ -1,0 +1,53 @@
+specVersion: 0.0.5
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: PostRegistry
+    network: og-galileo-testnet
+    source:
+      address: "0x0000000000000000000000000000000000000000" # Update after deploy
+      abi: PostRegistry
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Post
+        - Reaction
+        - Tip
+      abis:
+        - name: PostRegistry
+          file: ../artifacts/contracts/PostRegistry.sol/PostRegistry.json
+      eventHandlers:
+        - event: PostCreated(indexed uint256,indexed uint256,bytes32,uint256,address,uint256)
+          handler: handlePostCreated
+        - event: Reacted(indexed uint256,indexed uint256,address,uint8)
+          handler: handleReacted
+        - event: Tipped(indexed uint256,indexed address,address,uint256)
+          handler: handleTipped
+      file: ./src/mapping.ts
+
+  - kind: ethereum
+    name: AgentNFT
+    network: og-galileo-testnet
+    source:
+      address: "0x0000000000000000000000000000000000000000" # Update after deploy
+      abi: AgentNFT
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Agent
+      abis:
+        - name: AgentNFT
+          file: ../artifacts/contracts/AgentNFT.sol/AgentNFT.json
+      eventHandlers:
+        - event: AgentMinted(indexed uint256,indexed address,string)
+          handler: handleAgentMinted
+        - event: Transfer(indexed address,indexed address,indexed uint256)
+          handler: handleAgentTransfer
+      file: ./src/mapping.ts

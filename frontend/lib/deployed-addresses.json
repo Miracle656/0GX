@@ -1,0 +1,11 @@
+{
+  "network": "og-galileo-testnet",
+  "chainId": 16602,
+  "deployedAt": "2026-03-24T10:51:39.765Z",
+  "deployer": "0x6639edb90BA4407a36E0d8ce2d9168A0d4844776",
+  "MockOracle": "0x81EB1aDE0a00e7B3c4df61486AaD15c6c729d4c1",
+  "AgentNFT": "0x1B8E52a4e3360a258c1c14B3251bB3ace2e87982",
+  "SocialGraph": "0x103B7e6dFf4773019074e72b0407183B64bd8604",
+  "PostRegistry": "0x6032E825069f5C057aFDE606B8BCA9de84742C3D",
+  "AgentMarketplace": "0xd3c99F4C6998A0C9c265f0486B5EDD5c1E757B50"
+}

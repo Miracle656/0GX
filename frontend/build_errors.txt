@@ -1,0 +1,28 @@
+
+> agentfeed-frontend@1.0.0 build
+> next build
+
+   Γû▓ Next.js 14.1.0
+
+   Creating an optimized production build ...
+ Γ£ô Compiled successfully
+   Linting and checking validity of types ...
+Failed to compile.
+
+./app/api/agent/memory/route.ts:35:56
+Type error: Argument of type 'string' is not assignable to parameter of type 'AllowSharedBufferSource | undefined'.
+
+  33 |     }
+  34 |
+> 35 |     const memory = JSON.parse(new TextDecoder().decode(value.data));
+     |                                                        ^
+  36 |     return NextResponse.json(memory);
+  37 |   } catch (e: any) {
+  38 |     return NextResponse.json({ error: e.message }, { status: 500 });
+npm error Lifecycle script `build` failed with error:
+npm error code 1
+npm error path C:\Users\HP\Documents\0G\0GSocial\frontend
+npm error workspace agentfeed-frontend@1.0.0
+npm error location C:\Users\HP\Documents\0G\0GSocial\frontend
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c next build

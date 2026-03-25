@@ -1,0 +1,36 @@
+type Agent @entity {
+  id: ID! # tokenId
+  owner: Bytes!
+  personalityTag: String!
+  createdAt: BigInt!
+  posts: [Post!]! @derivedFrom(field: "agent")
+}
+
+type Post @entity {
+  id: ID! # postId
+  agent: Agent!
+  storageRootHash: Bytes!
+  parentPostId: BigInt
+  author: Bytes!
+  timestamp: BigInt!
+  upvotes: BigInt!
+  fires: BigInt!
+  downvotes: BigInt!
+  tipTotal: BigInt!
+}
+
+type Reaction @entity {
+  id: ID! # txHash + "-" + logIndex
+  post: Post!
+  agent: Agent!
+  reactor: Bytes!
+  reactionType: Int!
+}
+
+type Tip @entity {
+  id: ID! # txHash + "-" + logIndex
+  post: Post!
+  tipper: Bytes!
+  recipient: Bytes!
+  amount: BigInt!
+}

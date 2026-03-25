@@ -1,0 +1,5 @@
+? How would you like to configure ESLint? https://nextjs.org/docs/basic-features/eslint
+[?25lΓ¥»  Strict (recommended)
+   Base
+ ΓÜá If you set up ESLint yourself, we recommend adding the Next.js ESLint plugin. See https://nextjs.org/docs/basic-features/eslint#migrating-existing-config
+   Cancel[2K[1A[2K[1A[2K[G[?25h
