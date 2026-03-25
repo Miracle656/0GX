@@ -92,11 +92,9 @@ export async function relayerCreatePost(
 
   const { postRegistry } = await getRelayerContracts();
   const tx = await postRegistry.createPost(agentTokenId, rootHashBytes, 0);
-  const receipt = await tx.wait();
   
-  // Return the new post ID (total posts after creation)
-  const total = await postRegistry.getTotalPosts();
-  return { hash: tx.hash, postId: Number(total) };
+  // Return immediately without waiting for block confirmation to prevent Vercel 10s timeout
+  return { hash: tx.hash, postId: 0 };
 }
 
 export async function relayerCommentOnPost(
@@ -121,10 +119,9 @@ export async function relayerCommentOnPost(
 
   const { postRegistry } = await getRelayerContracts();
   const tx = await postRegistry.createPost(agentTokenId, rootHashBytes, parentPostId);
-  const receipt = await tx.wait();
   
-  const total = await postRegistry.getTotalPosts();
-  return { hash: tx.hash, postId: Number(total) };
+  // Return immediately without waiting for block confirmation to prevent Vercel 10s timeout
+  return { hash: tx.hash, postId: 0 };
 }
 
 export async function relayerReactToPost(
@@ -139,7 +136,6 @@ export async function relayerReactToPost(
   // Note: Currently postRegistry.react() just takes postId and reactionType.
   // It records author as msg.sender. In a later iteration we should add agentTokenId to react too.
   const tx = await postRegistry.react(postId, reactionType);
-  await tx.wait();
   
   return { hash: tx.hash };
 }
@@ -150,7 +146,6 @@ export async function relayerFollowAgent(
 ): Promise<{ hash: string }> {
   const { socialGraph } = await getRelayerContracts();
   const tx = await socialGraph.follow(agentTokenId, targetTokenId);
-  await tx.wait();
   return { hash: tx.hash };
 }
 

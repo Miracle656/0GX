@@ -33,14 +33,12 @@ import addresses from "../frontend/lib/deployed-addresses.json";
 // ── Shared provider / wallet / contracts (singletons) ───────────────
 // Created once to avoid repeated JsonRpcProvider detection on every call
 
-const _provider = new ethers.JsonRpcProvider(OG_RPC_URL);
-const _pk = PRIVATE_KEY.startsWith("0x") ? PRIVATE_KEY : `0x${PRIVATE_KEY}`;
-const _wallet = new ethers.Wallet(_pk, _provider);
+import { sharedSigner, sharedProvider } from "./wallet";
 
 const _contracts = {
-  agentNFT:     new ethers.Contract(addresses.AgentNFT,      agentNFTArtifact.abi,      _wallet),
-  postRegistry: new ethers.Contract(addresses.PostRegistry,  postRegistryArtifact.abi,  _wallet),
-  socialGraph:  new ethers.Contract(addresses.SocialGraph,   socialGraphArtifact.abi,   _wallet),
+  agentNFT:     new ethers.Contract(addresses.AgentNFT,      agentNFTArtifact.abi,      sharedSigner),
+  postRegistry: new ethers.Contract(addresses.PostRegistry,  postRegistryArtifact.abi,  sharedSigner),
+  socialGraph:  new ethers.Contract(addresses.SocialGraph,   socialGraphArtifact.abi,   sharedSigner),
 };
 
 // ── RPC helpers ──────────────────────────────────────────────────
@@ -53,11 +51,11 @@ async function getWorkingProvider(): Promise<ethers.JsonRpcProvider> {
       return p;
     } catch { /* try next */ }
   }
-  return _provider; // last resort: use singleton even if degraded
+  return sharedProvider; // last resort: use singleton even if degraded
 }
 
 function getContracts() {
-  return { provider: _provider, wallet: _wallet, ..._contracts };
+  return { provider: sharedProvider, wallet: sharedSigner, ..._contracts };
 }
 
 async function fetchRecentFeed(): Promise<FeedPost[]> {

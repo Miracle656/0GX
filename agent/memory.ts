@@ -34,40 +34,35 @@ function getDefaultMemory(agentTokenId: number): AgentMemory {
   };
 }
 
-function encodeKey(key: string): Uint8Array {
-  return new TextEncoder().encode(key);
-}
+import { createClient } from "redis";
 
-function encodeValue(value: object): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(value));
-}
-
-function decodeValue(raw: unknown): object {
-  return JSON.parse(new TextDecoder().decode(raw as Uint8Array));
+// Helper to safely run redis commands in the standard node process
+async function runRedis<T>(cb: (client: any) => Promise<T>): Promise<T> {
+  const url = process.env.REDIS_URL || process.env.KV_REST_API_URL;
+  if (!url) {
+    throw new Error("Missing required REDIS_URL environment variable.");
+  }
+  
+  const client = createClient({ url });
+  await client.connect();
+  
+  try {
+    return await cb(client);
+  } finally {
+    await client.disconnect();
+  }
 }
 
 /**
- * Read agent memory from 0G Storage KV layer
+ * Read agent memory from Redis cache
  */
-const KV_TIMEOUT_MS = 5_000; // fail fast if KV node is unreachable
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`KV timeout after ${ms}ms`)), ms)
-    ),
-  ]);
-}
-
 export async function getMemory(agentTokenId: number): Promise<AgentMemory> {
   try {
-    const kvClient = new KvClient(OG_KV_NODE_URL);
-    const key = encodeKey(`agent:${agentTokenId}:memory`);
-    const value = await withTimeout(kvClient.getValue(AGENTFEED_STREAM_ID, key), KV_TIMEOUT_MS);
-
-    if (!value) return getDefaultMemory(agentTokenId);
-    return decodeValue(value) as AgentMemory;
+    return await runRedis(async (client) => {
+      const data = await client.get(`agent:${agentTokenId}:memory`);
+      if (!data) return getDefaultMemory(agentTokenId);
+      return typeof data === "string" ? JSON.parse(data) : data;
+    });
   } catch (e) {
     console.warn(`getMemory(${agentTokenId}) failed, using default:`, (e as Error).message);
     return getDefaultMemory(agentTokenId);
@@ -75,31 +70,14 @@ export async function getMemory(agentTokenId: number): Promise<AgentMemory> {
 }
 
 /**
- * Write agent memory to 0G Storage KV layer
+ * Write agent memory to Redis cache
  */
 export async function setMemory(agentTokenId: number, memory: AgentMemory): Promise<void> {
   try {
-    const provider = new ethers.JsonRpcProvider(OG_RPC_URL);
-    const pk = process.env.PRIVATE_KEY!;
-    const wallet = new ethers.Wallet(pk.startsWith("0x") ? pk : `0x${pk}`, provider);
-    const indexer = new Indexer(process.env.OG_STORAGE_INDEXER || "https://indexer-storage-testnet-turbo.0g.ai");
-
-    // Write memory JSON via 0G Storage (same pattern as post uploads)
-    const fs = await import("fs");
-    const path = await import("path");
-    const tmpPath = path.join(process.env.TEMP || "/tmp", `memory-${agentTokenId}-${Date.now()}.json`);
-    fs.writeFileSync(tmpPath, JSON.stringify(memory));
-
-    try {
-      const file = await ZgFile.fromFilePath(tmpPath);
-      const [, uploadErr] = await indexer.upload(file, OG_RPC_URL, wallet);
-      await file.close();
-      if (uploadErr) throw new Error(`Memory upload error: ${uploadErr}`);
-    } finally {
-      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-    }
+    await runRedis(async (client) => {
+      await client.set(`agent:${agentTokenId}:memory`, JSON.stringify(memory));
+    });
   } catch (e) {
-    // Memory writes are best-effort — log but don't crash the agent loop
     console.warn(`setMemory(${agentTokenId}) failed (non-critical):`, (e as Error).message);
   }
 }

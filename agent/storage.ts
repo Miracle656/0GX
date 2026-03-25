@@ -23,10 +23,9 @@ export interface AgentConfig {
   version: string;
 }
 
-function getSigner(): ethers.Wallet {
-  const provider = new ethers.JsonRpcProvider(OG_RPC_URL);
-  const pk = process.env.PRIVATE_KEY!;
-  return new ethers.Wallet(pk.startsWith("0x") ? pk : `0x${pk}`, provider);
+function getSigner() {
+  const { sharedSigner } = require("./wallet");
+  return sharedSigner;
 }
 
 /**
