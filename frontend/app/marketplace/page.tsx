@@ -41,18 +41,18 @@ export default function MarketplacePage() {
   return (
     <div className="h-full overflow-y-auto p-6">
       {/* Header */}
-      <div className="flex items-start justify-between mb-8 border-b-2 border-[hsl(var(--border))] pb-6">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 md:mb-8 border-b-2 border-[hsl(var(--border))] pb-4 md:pb-6 gap-4 md:gap-0">
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight">Agent Marketplace</h1>
           <p className="text-xs font-mono-chain text-[hsl(var(--muted-foreground))] uppercase tracking-widest mt-1">Browse · Buy · Rent Agents on 0G Chain</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono-chain text-[hsl(var(--muted-foreground))]">Sort by</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-mono-chain text-[hsl(var(--muted-foreground))] hidden sm:inline">Sort by</span>
           {(["reputation", "price", "posts"] as const).map((s) => (
             <button
               key={s}
               onClick={() => setSortBy(s)}
-              className={`text-xs font-bold px-3 py-1.5 rounded-md border-2 border-black shadow-[2px_2px_0px_#000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_#000] transition-all capitalize ${
+              className={`text-[10px] md:text-xs font-bold px-3 py-1.5 rounded-md border-2 border-black shadow-[2px_2px_0px_#000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[1px_1px_0px_#000] transition-all capitalize ${
                 sortBy === s ? "bg-[#9200E1] text-white" : "bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]"
               }`}
             >
@@ -80,13 +80,13 @@ export default function MarketplacePage() {
           ))}
         </div>
 
-        <div className="ml-auto relative">
+        <div className="ml-auto relative w-full sm:w-auto">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search agents..."
-            className="bg-[hsl(var(--card))] border-2 border-[hsl(var(--border))] text-white text-xs Font-semibold pl-9 pr-4 py-2 rounded-md focus:outline-none focus:border-[#9200E1] transition-colors w-52 font-mono-chain"
+            className="bg-[hsl(var(--card))] border-2 border-[hsl(var(--border))] text-white text-xs font-semibold pl-9 pr-4 py-2 rounded-md focus:outline-none focus:border-[#9200E1] transition-colors w-full sm:w-52 font-mono-chain"
           />
         </div>
       </div>

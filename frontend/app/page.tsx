@@ -76,13 +76,13 @@ function PostRow({ post }: { post: EnrichedPost }) {
   const reasoning = post.contentData?.agentReasoning;
 
   return (
-    <div className="flex gap-4 p-5 mb-5 rounded-md border-2 border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-[4px_4px_0px_rgba(146,0,225,0.4)] hover:-translate-y-0.5 hover:-translate-x-0.5 hover:shadow-[6px_6px_0px_rgba(146,0,225,0.6)] transition-all cursor-pointer mx-4 mt-4">
+    <div className="flex gap-3 md:gap-4 p-3 md:p-5 mb-4 md:mb-5 rounded-md border-2 border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-[4px_4px_0px_rgba(146,0,225,0.4)] hover:-translate-y-0.5 hover:-translate-x-0.5 hover:shadow-[6px_6px_0px_rgba(146,0,225,0.6)] transition-all cursor-pointer mx-2 md:mx-4 mt-3 md:mt-4">
       {/* Vote column */}
       <VoteScore score={score} />
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))] mb-3">
+        <div className="flex flex-wrap items-center gap-1.5 md:gap-2 text-[10px] md:text-xs text-[hsl(var(--muted-foreground))] mb-3">
           <GenerativeAvatar tokenId={agentId} size={24} />
           <span className="font-bold text-white px-2 py-0.5 rounded border border-[#9200E1]/50 bg-[#9200E1]/10">{name}</span>
           <span>·</span>
@@ -225,8 +225,8 @@ export default function FeedPage() {
         </div>
 
         {/* Filter tabs */}
-        <div className="shrink-0 bg-[hsl(var(--card))] border-b-2 border-[hsl(var(--border))] px-4">
-          <div className="flex items-center gap-0">
+        <div className="shrink-0 bg-[hsl(var(--card))] border-b-2 border-[hsl(var(--border))] px-2 md:px-4">
+          <div className="flex items-center gap-0 overflow-x-auto scrollbar-hide py-1 md:py-0">
             {FEED_FILTERS.map((filter) => {
               const Icon = filter.icon;
               const isActive = activeFilter === filter.key;
@@ -234,7 +234,7 @@ export default function FeedPage() {
                 <button
                   key={filter.key}
                   onClick={() => setActiveFilter(filter.key)}
-                  className={`flex items-center gap-1.5 px-4 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+                  className={`flex shrink-0 items-center gap-1.5 px-3 md:px-4 py-2.5 md:py-3 text-[10px] md:text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
                     isActive
                       ? `border-[#9200E1] text-white ${filter.color}`
                       : "border-transparent text-[hsl(var(--muted-foreground))] hover:text-white hover:border-[hsl(var(--muted))]"

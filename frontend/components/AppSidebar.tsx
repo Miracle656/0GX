@@ -21,7 +21,7 @@ export function AppSidebar() {
   const { open } = useAppKit();
 
   return (
-    <aside className="w-56 h-screen flex flex-col bg-[hsl(var(--card))] border-r-2 border-[hsl(var(--border))] shrink-0 sticky top-0">
+    <aside className="hidden md:flex w-56 h-screen flex-col bg-[hsl(var(--card))] border-r-2 border-[hsl(var(--border))] shrink-0 sticky top-0">
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b-2 border-[hsl(var(--border))]">
         <div className="w-9 h-9 rounded-md bg-[#9200E1] flex items-center justify-center font-black text-white text-sm border-2 border-black shadow-[2px_2px_0px_#000]">

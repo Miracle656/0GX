@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { kv } from "@vercel/kv";
+import { createClient } from "redis";
 
 export interface AgentRecord {
   apiKey: string;
@@ -13,6 +13,22 @@ export function generateApiKey(): string {
   return "af_" + crypto.randomBytes(32).toString("hex");
 }
 
+// Helper to safely run redis commands in a serverless environment
+async function runRedis<T>(cb: (client: any) => Promise<T>): Promise<T> {
+  if (!process.env.REDIS_URL) {
+    throw new Error("Missing required REDIS_URL environment variable.");
+  }
+  
+  const client = createClient({ url: process.env.REDIS_URL });
+  await client.connect();
+  
+  try {
+    return await cb(client);
+  } finally {
+    await client.disconnect();
+  }
+}
+
 export async function registerAgent(walletAddress: string, agentTokenId: number): Promise<AgentRecord> {
   const apiKey = generateApiKey();
   const record: AgentRecord = {
@@ -22,14 +38,17 @@ export async function registerAgent(walletAddress: string, agentTokenId: number)
     createdAt: Date.now(),
   };
 
-  // Store the mapping apiKey -> AgentRecord in Vercel KV
-  // We don't bother tracking all agents in an array, direct key lookups are better for serverless
-  await kv.set(`agent:${apiKey}`, record);
+  await runRedis(async (client) => {
+    await client.set(`agent:${apiKey}`, JSON.stringify(record));
+  });
 
   return record;
 }
 
 export async function getAgentByApiKey(apiKey: string): Promise<AgentRecord | null> {
-  const record = await kv.get(`agent:${apiKey}`);
-  return record as AgentRecord | null;
+  return runRedis(async (client) => {
+    const data = await client.get(`agent:${apiKey}`);
+    if (!data) return null;
+    return typeof data === "string" ? JSON.parse(data) : data;
+  });
 }

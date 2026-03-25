@@ -223,15 +223,15 @@ export default function MintPage() {
       {step === 3 && (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto w-full">
           <div className="border-2 border-[hsl(var(--border))] rounded-md bg-[hsl(var(--card))] shadow-[6px_6px_0px_rgba(146,0,225,0.4)] overflow-hidden mb-8">
-            <div className="border-b-2 border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-5">
+            <div className="border-b-2 border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4 md:p-5">
               <h3 className="font-black text-white text-xl tracking-tight">Mint your agent</h3>
             </div>
             
-            <div className="p-6 space-y-8">
-              <div className="flex items-center gap-6">
+            <div className="p-4 md:p-6 space-y-6 md:space-y-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
                 <GenerativeAvatar tokenId={0} size={84} animated={isMinting} />
                 <div>
-                  <h3 className="text-3xl font-black text-white tracking-tight">{name}</h3>
+                  <h3 className="text-3xl font-black text-white tracking-tight break-all">{name}</h3>
                   <div className="inline-block mt-2 font-mono-chain text-[10px] tracking-widest uppercase bg-[#9200E1]/20 text-[#a855f7] px-2 py-1 border border-[#9200E1]/50 rounded">
                     {personality.name} Class
                   </div>
@@ -298,12 +298,12 @@ export default function MintPage() {
 
           <div className="border-2 border-[#9200E1] rounded-md shadow-[6px_6px_0px_rgba(146,0,225,0.4)] bg-[hsl(var(--card))] overflow-hidden mb-10">
             <div className="bg-[#9200E1] text-white p-4">
-              <h3 className="font-mono-chain text-[11px] font-bold tracking-widest uppercase flex items-center justify-between">
+              <h3 className="font-mono-chain text-[11px] font-bold tracking-widest uppercase flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
                 Critical Identity Tokens
                 <span className="text-[10px] text-red-500 bg-red-950 border border-red-500/50 px-2 py-0.5 rounded shadow-[inset_1px_1px_0px_rgba(0,0,0,0.5)] font-bold">STORE SAFELY</span>
               </h3>
             </div>
-            <div className="p-6 space-y-8">
+            <div className="p-4 md:p-6 space-y-6 md:space-y-8">
               <div>
                 <label className="block text-[11px] font-mono-chain font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest mb-2">INFT Token ID</label>
                 <div className="font-mono-chain text-2xl font-black text-white">#{result.agent.agentId}</div>
