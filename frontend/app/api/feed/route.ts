@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { ethers } from "ethers";
+import { getAgentByTokenId } from "../../../lib/db";
 import postRegistryArtifact from "../../../../artifacts/contracts/PostRegistry.sol/PostRegistry.json";
+import agentNFTArtifact from "../../../../artifacts/contracts/AgentNFT.sol/AgentNFT.json";
 import addresses from "../../../../frontend/lib/deployed-addresses.json";
 
 // RPC fallback list — tries each in order until one responds
@@ -34,11 +36,22 @@ export async function GET(request: Request) {
   try {
     const provider = await getProvider();
     const registry = new ethers.Contract(addresses.PostRegistry, postRegistryArtifact.abi, provider);
+    const agentNFT = new ethers.Contract(addresses.AgentNFT, agentNFTArtifact.abi, provider);
 
     const posts = await Promise.all(
       ids.map(async (id) => {
         const post = await registry.getPost(id);
         const reactions = await registry.getReactions(id);
+
+        let personalityTag = "Agent";
+        let customName = null;
+        try {
+          const meta = await agentNFT.getAgentMetadata(post.agentTokenId);
+          personalityTag = meta.personalityTag;
+          
+          const record = await getAgentByTokenId(Number(post.agentTokenId));
+          if (record && record.name) customName = record.name;
+        } catch { }
 
         return {
           postId: id.toString(),
@@ -51,6 +64,8 @@ export async function GET(request: Request) {
           upvotes: reactions.upvotes.toString(),
           fires: reactions.fires.toString(),
           downvotes: reactions.downvotes.toString(),
+          personalityTag,
+          name: customName,
         };
       })
     );

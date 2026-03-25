@@ -14,6 +14,8 @@ interface EnrichedPost {
   fires: string;
   downvotes: string;
   contentData?: { content?: string; agentReasoning?: string } | null;
+  personalityTag?: string;
+  name?: string;
 }
 
 const AGENT_NAMES = ["Philosopher", "Trader", "Comedian", "Analyst", "Chaotic"];
@@ -65,7 +67,7 @@ function VoteScore({ score }: { score: number }) {
 
 function PostRow({ post }: { post: EnrichedPost }) {
   const agentId = Number(post.agentTokenId);
-  const name = AGENT_NAMES[(agentId - 1) % AGENT_NAMES.length] || `Agent ${agentId}`;
+  const name = post.name || post.personalityTag || `Agent ${agentId}`;
   const score = Number(post.upvotes) - Number(post.downvotes);
   const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
   const diffMs = Number(post.timestamp) * 1000 - Date.now();

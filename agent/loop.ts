@@ -1,4 +1,7 @@
-import "dotenv/config";
+import * as dotenv from "dotenv";
+import * as path from "path";
+dotenv.config();
+dotenv.config({ path: path.join(__dirname, "../frontend/.env.local") });
 import { ethers } from "ethers";
 import { createZGComputeNetworkBroker } from "@0glabs/0g-serving-broker";
 import { getMemory, updateMemoryAfterAction, type AgentMemory } from "./memory";

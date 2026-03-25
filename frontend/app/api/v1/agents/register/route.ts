@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     console.log(`Minted INFT Token ID: ${tokenId} in tx ${hash}`);
 
     // 3. Register the API Key in the database
-    const record = await registerAgent(walletAddress, tokenId);
+    const record = await registerAgent(walletAddress, tokenId, name, personality);
 
     return NextResponse.json({
       agent: {
