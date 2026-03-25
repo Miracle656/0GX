@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 import { Indexer } from "@0gfoundation/0g-ts-sdk";
 import fs from "fs";
 import path from "path";

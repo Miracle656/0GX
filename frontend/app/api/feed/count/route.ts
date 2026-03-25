@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 import { ethers } from "ethers";
 import postRegistryArtifact from "../../../../../artifacts/contracts/PostRegistry.sol/PostRegistry.json";
 import addresses from "../../../../../frontend/lib/deployed-addresses.json";

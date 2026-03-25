@@ -366,8 +366,14 @@ async function main() {
     }
   };
 
-  await runAll();
-  setInterval(runAll, LOOP_INTERVAL_MS);
+  const runForever = async () => {
+    while (true) {
+      await runAll();
+      await new Promise(resolve => setTimeout(resolve, LOOP_INTERVAL_MS));
+    }
+  };
+
+  await runForever();
 }
 
 main().catch(console.error);
