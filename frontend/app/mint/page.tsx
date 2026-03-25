@@ -122,206 +122,215 @@ export default function MintPage() {
 
       {step === 1 && (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <h2 className="text-2xl font-heading mb-6">Select Base Matrix</h2>
+          <h2 className="text-2xl font-black text-white mb-6 tracking-tight">Select Base Matrix</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
             {PERSONALITIES.map((p) => {
               const isSelected = personality.id === p.id;
+              const Icon = p.icon;
               return (
-                <Card
+                <div
                   key={p.id}
-                  className={`cursor-pointer transition-all border-2 border-border ${
+                  className={`cursor-pointer transition-all rounded-md p-6 border-2 ${
                     isSelected 
-                      ? "bg-main text-main-foreground translate-x-[-4px] translate-y-[-4px] shadow-[8px_8px_0px_#000]" 
-                      : "bg-card hover:-translate-x-[2px] hover:-translate-y-[2px] shadow-light"
+                      ? "border-[#9200E1] bg-[#9200E1] text-white -translate-x-1 -translate-y-1 shadow-[6px_6px_0px_#000]" 
+                      : "border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:-translate-x-1 hover:-translate-y-1 shadow-[4px_4px_0px_rgba(146,0,225,0.5)] hover:shadow-[6px_6px_0px_rgba(146,0,225,0.7)]"
                   }`}
                   onClick={() => setPersonality(p)}
                 >
-                  <CardHeader className="pb-2">
-                    <div className="text-4xl mb-2">{p.emoji}</div>
-                    <CardTitle className={`font-heading text-xl ${isSelected ? "text-main-foreground" : ""}`}>
-                      {p.name}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className={`text-sm font-base ${isSelected ? "text-main-foreground/90" : "text-muted-foreground"}`}>
-                      {p.desc}
-                    </p>
-                  </CardContent>
-                </Card>
+                  <div className={`w-12 h-12 rounded flex items-center justify-center mb-4 border-2 border-black shadow-[2px_2px_0px_#000] ${isSelected ? "bg-white text-[#9200E1]" : "bg-[hsl(var(--secondary))] text-[#9200E1]"}`}>
+                    <Icon size={24} strokeWidth={2.5} />
+                  </div>
+                  <h3 className={`font-black text-xl mb-2 ${isSelected ? "text-white" : "text-white"}`}>
+                    {p.name}
+                  </h3>
+                  <p className={`text-sm font-medium ${isSelected ? "text-white/90" : "text-[hsl(var(--muted-foreground))]"}`}>
+                    {p.desc}
+                  </p>
+                </div>
               );
             })}
           </div>
           <div className="flex justify-end">
-            <Button 
-              size="lg"
+            <button 
               onClick={nextStep}
-              className="font-heading uppercase tracking-widest"
+              className="flex items-center gap-2 px-8 py-3.5 bg-[#9200E1] hover:bg-purple-700 text-white font-black text-sm uppercase tracking-widest rounded-md border-2 border-black shadow-[4px_4px_0px_#000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0px_#000] transition-all"
             >
-              Continue <ChevronRight className="ml-2 w-4 h-4" />
-            </Button>
+              Continue <ChevronRight size={16} strokeWidth={3} />
+            </button>
           </div>
         </div>
       )}
 
       {step === 2 && (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl">
-          <Card className="border-2 border-border shadow-light bg-card">
-            <CardHeader className="border-b-2 border-border bg-muted/20 pb-4">
-              <CardTitle className="font-heading">Name your agent</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6 pt-6">
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto w-full">
+          <div className="border-2 border-[hsl(var(--border))] rounded-md bg-[hsl(var(--card))] shadow-[6px_6px_0px_rgba(146,0,225,0.4)] overflow-hidden">
+            <div className="border-b-2 border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-5">
+              <h3 className="font-black text-white text-xl tracking-tight">Name your agent</h3>
+            </div>
+            <div className="p-6 space-y-6">
               <div>
-                <label className="block text-xs font-mono-chain font-bold text-main uppercase tracking-widest mb-2">Designation</label>
-                <Input
+                <label className="block text-[11px] font-mono-chain font-bold text-[#9200E1] uppercase tracking-widest mb-3">Designation</label>
+                <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. PhilosopherBot_X"
-                  className="font-mono-chain text-sm border-2 border-border shadow-none focus-visible:ring-0 focus-visible:shadow-[4px_4px_0px_var(--shadow)] focus-visible:-translate-x-1 focus-visible:-translate-y-1 transition-all rounded-base"
+                  className="w-full bg-black text-white font-mono-chain px-4 py-3 border-2 border-[hsl(var(--border))] focus:outline-none focus:border-[#9200E1] focus:ring-0 shadow-[inset_2px_2px_0px_rgba(0,0,0,0.5)] rounded placeholder:text-gray-600 transition-colors"
                 />
               </div>
 
               <div className="pt-2">
-                <Button variant="neutral" size="sm" onClick={toggleCustomPrompt} className="font-base">
+                <button 
+                  onClick={toggleCustomPrompt} 
+                  className="font-black text-sm text-[hsl(var(--muted-foreground))] hover:text-white transition-colors"
+                >
                   {showPrompt ? "- Hide system prompt" : "+ Custom system prompt (optional)"}
-                </Button>
+                </button>
                 {showPrompt && (
-                  <div className="mt-4">
-                    <label className="block text-xs font-mono-chain font-bold text-muted-foreground uppercase tracking-widest mb-2">Core Directives</label>
-                    <Textarea
+                  <div className="mt-5">
+                    <label className="block text-[11px] font-mono-chain font-bold text-[#9200E1] uppercase tracking-widest mb-3">Core Directives</label>
+                    <textarea
                       value={systemPrompt}
                       onChange={(e) => setSystemPrompt(e.target.value)}
                       rows={5}
-                      className="font-mono-chain text-sm leading-relaxed border-2 border-border shadow-none focus-visible:ring-0 focus-visible:shadow-[4px_4px_0px_var(--shadow)] focus-visible:-translate-x-1 focus-visible:-translate-y-1 transition-all rounded-base"
+                      className="w-full bg-black text-white font-mono-chain text-sm leading-relaxed p-4 border-2 border-[hsl(var(--border))] focus:outline-none focus:border-[#9200E1] focus:ring-0 shadow-[inset_2px_2px_0px_rgba(0,0,0,0.5)] rounded placeholder:text-gray-600 transition-colors"
                       placeholder="You are a..."
                     />
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <div className="flex justify-between mt-8">
-            <Button variant="neutral" size="lg" onClick={() => setStep(1)} className="font-heading uppercase tracking-widest">
+          <div className="flex items-center justify-between mt-8">
+            <button 
+              onClick={() => setStep(1)} 
+              className="px-6 py-3 bg-[hsl(var(--secondary))] hover:bg-white hover:text-black text-white font-black text-sm uppercase tracking-widest rounded-md border-2 border-black shadow-[4px_4px_0px_#000] transition-all"
+            >
               Back
-            </Button>
-            <Button 
-              size="lg"
+            </button>
+            <button 
               onClick={nextStep}
               disabled={!name}
-              className="font-heading uppercase tracking-widest"
+              className="flex items-center gap-2 px-8 py-3 bg-[#9200E1] hover:bg-purple-700 disabled:bg-gray-700 disabled:text-gray-400 text-white font-black text-sm uppercase tracking-widest rounded-md border-2 border-black shadow-[4px_4px_0px_#000] hover:-translate-y-[1px] hover:-translate-x-[1px] hover:shadow-[6px_6px_0px_#000] disabled:shadow-none transition-all"
             >
-              Next <ChevronRight className="ml-2 w-4 h-4" />
-            </Button>
+              Next <ChevronRight size={16} strokeWidth={3} />
+            </button>
           </div>
         </div>
       )}
 
       {step === 3 && (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl">
-          <Card className="border-2 border-border shadow-light bg-card mb-8">
-            <CardHeader className="border-b-2 border-border bg-muted/20 pb-4">
-              <CardTitle className="font-heading">Mint your agent</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-6">
-              
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto w-full">
+          <div className="border-2 border-[hsl(var(--border))] rounded-md bg-[hsl(var(--card))] shadow-[6px_6px_0px_rgba(146,0,225,0.4)] overflow-hidden mb-8">
+            <div className="border-b-2 border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-5">
+              <h3 className="font-black text-white text-xl tracking-tight">Mint your agent</h3>
+            </div>
+            
+            <div className="p-6 space-y-8">
               <div className="flex items-center gap-6">
-                <GenerativeAvatar tokenId={0} size={80} animated={isMinting} />
+                <GenerativeAvatar tokenId={0} size={84} animated={isMinting} />
                 <div>
-                  <h3 className="text-3xl font-heading">{name}</h3>
-                  <Badge className="font-mono-chain text-[10px] tracking-widest uppercase mt-2">
+                  <h3 className="text-3xl font-black text-white tracking-tight">{name}</h3>
+                  <div className="inline-block mt-2 font-mono-chain text-[10px] tracking-widest uppercase bg-[#9200E1]/20 text-[#a855f7] px-2 py-1 border border-[#9200E1]/50 rounded">
                     {personality.name} Class
-                  </Badge>
+                  </div>
                 </div>
               </div>
 
-              <div className="border-2 border-border rounded-base p-6 space-y-4 bg-muted/30">
-                <div className="flex justify-between items-center border-b-2 border-border pb-2">
-                  <span className="font-bold text-sm">Personality</span>
-                  <Badge variant="neutral" className="uppercase font-bold tracking-widest text-[10px]">{personality.id}</Badge>
+              <div className="border-2 border-[hsl(var(--border))] rounded bg-black/50 p-6 space-y-4">
+                <div className="flex justify-between items-center border-b-2 border-[hsl(var(--border))/40] pb-3">
+                  <span className="font-bold text-sm text-[hsl(var(--muted-foreground))]">Personality</span>
+                  <span className="uppercase font-bold tracking-widest text-[10px] bg-[hsl(var(--secondary))] px-2 py-1 rounded text-white">{personality.id}</span>
                 </div>
-                <div className="flex justify-between items-center border-b-2 border-border pb-2">
-                  <span className="font-bold text-sm">Name</span>
-                  <span className="font-mono-chain text-sm">{name}</span>
+                <div className="flex justify-between items-center border-b-2 border-[hsl(var(--border))/40] pb-3">
+                  <span className="font-bold text-sm text-[hsl(var(--muted-foreground))]">Name</span>
+                  <span className="font-mono-chain text-sm text-white">{name}</span>
                 </div>
-                <div className="flex justify-between items-center border-b-2 border-border pb-2">
-                  <span className="font-bold text-sm">Storage</span>
-                  <span className="font-mono-chain text-xs bg-muted px-2 py-1 border-2 border-border rounded-base">0G Storage (permanent)</span>
+                <div className="flex justify-between items-center border-b-2 border-[hsl(var(--border))/40] pb-3">
+                  <span className="font-bold text-sm text-[hsl(var(--muted-foreground))]">Storage</span>
+                  <span className="font-mono-chain text-[11px] bg-[#9200E1]/20 text-[#a855f7] px-2 py-1 border border-[#9200E1]/50 rounded">0G Network (permanent)</span>
                 </div>
-                <div className="flex justify-between items-center pt-2 font-heading text-lg">
+                <div className="flex justify-between items-center pt-2 font-black text-lg text-white">
                   <span>Cost</span>
-                  <span className="text-main">0.1 OG</span>
+                  <span className="text-green-400">0.1 OG</span>
                 </div>
               </div>
 
               {error && (
-                <div className="p-4 bg-red-500/10 border-2 border-red-500 rounded-base text-red-500 font-mono-chain text-sm shadow-[4px_4px_0px_#ef4444]">
+                <div className="p-4 bg-red-950/50 border border-red-500 rounded text-red-500 font-mono-chain text-sm shadow-[inset_2px_2px_0px_rgba(239,68,68,0.2)]">
                   {error}
                 </div>
               )}
-            </CardContent>
-            <CardFooter className="pt-0">
-              <Button 
-                size="lg"
-                className="w-full font-heading text-lg h-14 tracking-widest uppercase border-black"
+            </div>
+            
+            <div className="p-6 pt-0">
+              <button 
+                className="w-full flex items-center justify-center gap-2 py-4 bg-[#9200E1] hover:bg-purple-700 disabled:bg-purple-900 disabled:text-white/50 text-white font-black text-base uppercase tracking-widest rounded-md border-2 border-[hsl(var(--border))] shadow-[4px_4px_0px_rgba(146,0,225,0.4)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_rgba(146,0,225,0.6)] disabled:shadow-none disabled:translate-x-0 disabled:translate-y-0 transition-all cursor-pointer"
                 onClick={handleMint}
                 disabled={isMinting}
               >
                 {isMinting ? mintingStep : "Mint Agent →"}
-              </Button>
-            </CardFooter>
-          </Card>
+              </button>
+            </div>
+          </div>
           
           {!isMinting && (
-             <Button variant="neutral" size="sm" onClick={() => setStep(2)} className="font-heading uppercase tracking-widest w-full">
+             <button 
+                onClick={() => setStep(2)} 
+                className="w-full py-3 bg-transparent hover:bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] hover:text-white font-black text-sm uppercase tracking-widest rounded-md border-2 border-[hsl(var(--border))] transition-all"
+              >
               Modify
-            </Button>
+            </button>
           )}
         </div>
       )}
 
       {step === 4 && result && (
-        <div className="animate-in zoom-in-95 duration-500 max-w-2xl text-center mx-auto py-12">
-          <div className="w-24 h-24 bg-green-400 border-4 border-black rounded-base flex items-center justify-center mx-auto mb-8 shadow-[8px_8px_0px_#000]">
+        <div className="animate-in zoom-in-95 duration-500 max-w-2xl mx-auto py-12">
+          <div className="w-24 h-24 bg-green-400 border-2 border-black rounded-md flex items-center justify-center mx-auto mb-8 shadow-[6px_6px_0px_rgba(74,222,128,0.6)]">
             <CheckCircle2 size={48} className="text-black" />
           </div>
-          <h2 className="text-4xl font-heading mb-4">Entity Online</h2>
-          <p className="text-muted-foreground mb-12 font-base group-hover:bg-main">
+          <h2 className="text-4xl font-black text-center text-white mb-4 tracking-tight">Entity Online</h2>
+          <p className="text-[hsl(var(--muted-foreground))] text-center mb-12 font-medium">
             Your autonomous agent has been permanently etched into the 0G network.
           </p>
 
-          <Card className="border-4 border-main shadow-[8px_8px_0px_#9200E1] bg-card text-left mb-10 overflow-hidden">
-            <CardHeader className="bg-main text-main-foreground border-b-4 border-main pb-4 pt-4">
-              <CardTitle className="font-mono-chain text-sm tracking-widest uppercase flex items-center justify-between">
+          <div className="border-2 border-[#9200E1] rounded-md shadow-[6px_6px_0px_rgba(146,0,225,0.4)] bg-[hsl(var(--card))] overflow-hidden mb-10">
+            <div className="bg-[#9200E1] text-white p-4">
+              <h3 className="font-mono-chain text-[11px] font-bold tracking-widest uppercase flex items-center justify-between">
                 Critical Identity Tokens
-                <span className="text-[10px] text-red-900 bg-red-400 border-2 border-red-900 px-2 py-0.5 rounded-base shadow-[2px_2px_0px_#7f1d1d] font-bold">Store Safely</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-6 space-y-6">
+                <span className="text-[10px] text-red-500 bg-red-950 border border-red-500/50 px-2 py-0.5 rounded shadow-[inset_1px_1px_0px_rgba(0,0,0,0.5)] font-bold">STORE SAFELY</span>
+              </h3>
+            </div>
+            <div className="p-6 space-y-8">
               <div>
-                <label className="block text-xs font-mono-chain font-bold text-muted-foreground uppercase tracking-widest mb-2">INFT Token ID</label>
-                <div className="font-mono-chain text-2xl font-bold text-foreground">#{result.agent.agentId}</div>
+                <label className="block text-[11px] font-mono-chain font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest mb-2">INFT Token ID</label>
+                <div className="font-mono-chain text-2xl font-black text-white">#{result.agent.agentId}</div>
               </div>
               
               <div>
-                <label className="block text-xs font-mono-chain font-bold text-muted-foreground uppercase tracking-widest mb-2">Bearer API Key</label>
-                <div className="bg-black border-2 border-border p-4 rounded-base text-green-400 font-mono-chain text-sm break-all select-all shadow-[inset_0_4px_10px_rgba(0,0,0,0.5)]">
+                <label className="block text-[11px] font-mono-chain font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest mb-2">Bearer API Key</label>
+                <div className="bg-black border border-[hsl(var(--border))] p-4 rounded text-green-400 font-mono-chain text-sm break-all select-all shadow-[inset_2px_2px_0px_rgba(0,0,0,0.5)]">
                   {result.agent.apiKey}
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-mono-chain font-bold text-muted-foreground uppercase tracking-widest mb-2">Transaction Hash</label>
-                <a href={`https://chainscan-galileo.0g.ai/tx/${result.agent.txHash}`} target="_blank" rel="noreferrer" className="font-mono-chain text-main hover:text-purple-400 text-sm truncate block transition-colors underline decoration-main/30 hover:decoration-main">
+                <label className="block text-[11px] font-mono-chain font-bold text-[hsl(var(--muted-foreground))] uppercase tracking-widest mb-2">Transaction Hash</label>
+                <a href={`https://chainscan-galileo.0g.ai/tx/${result.agent.txHash}`} target="_blank" rel="noreferrer" className="font-mono-chain text-[#a855f7] hover:text-white text-sm truncate block transition-colors underline decoration-[#a855f7]/50 hover:decoration-white">
                   {result.agent.txHash}
                 </a>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          <Button size="lg" variant="default" className="w-full font-heading text-xl h-16 tracking-widest uppercase border-black" onClick={() => window.location.href = '/dashboard'}>
+          <button 
+            className="w-full flex justify-center py-5 bg-white hover:bg-gray-200 text-black font-black text-lg uppercase tracking-widest rounded-md border-2 border-transparent shadow-[4px_4px_0px_rgba(255,255,255,0.4)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[6px_6px_0px_rgba(255,255,255,0.6)] transition-all cursor-pointer"
+            onClick={() => window.location.href = '/dashboard'}
+          >
             Enter Command Center
-          </Button>
+          </button>
         </div>
       )}
     </div>
