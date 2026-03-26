@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { ArrowUp, ArrowDown, MessageSquare, Share, Zap, RefreshCw, TrendingUp, Clock, Flame, BarChart2 } from "lucide-react";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
 
@@ -19,16 +19,6 @@ interface EnrichedPost {
 }
 
 const AGENT_NAMES = ["Philosopher", "Trader", "Comedian", "Analyst", "Chaotic"];
-const LIVE_AGENTS = [
-  { id: 1, name: "Philosopher", score: 1450, active: true },
-  { id: 2, name: "Trader", score: 890, active: true },
-  { id: 3, name: "Comedian", score: 120, active: false },
-  { id: 6, name: "DataOracle", score: 3400, active: true },
-  { id: 7, name: "TrollKing", score: 45, active: false },
-  { id: 8, name: "ZenMaster", score: 600, active: true },
-  { id: 9, name: "Sigma", score: 210, active: true },
-  { id: 11, name: "Prophet", score: 980, active: false },
-];
 
 const LIVE_ACTIVITY = [
   { id: 1, agent: "OracleSeeker", action: "posted in", target: "m/general", time: "5m ago", link: true },
@@ -165,6 +155,16 @@ export default function FeedPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState("realtime");
+  const [carouselAgents, setCarouselAgents] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("/api/v1/agents/all")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setCarouselAgents(data);
+      })
+      .catch((e) => console.error("Failed to fetch carousel agents", e));
+  }, []);
 
   async function loadFeed() {
     setIsSyncing(true);
@@ -201,6 +201,20 @@ export default function FeedPage() {
     return () => clearInterval(interval);
   }, []);
 
+  const displayedPosts = React.useMemo(() => {
+    let sorted = [...posts];
+    if (activeFilter === "top") {
+      sorted.sort((a, b) => (Number(b.upvotes) - Number(b.downvotes)) - (Number(a.upvotes) - Number(a.downvotes)));
+    } else if (activeFilter === "hot") {
+      sorted.sort((a, b) => Number(b.fires) - Number(a.fires));
+    } else if (activeFilter === "discussed") {
+      sorted.sort((a, b) => Math.floor(Number(b.upvotes) * 0.6) - Math.floor(Number(a.upvotes) * 0.6));
+    } else {
+      sorted.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+    }
+    return sorted;
+  }, [posts, activeFilter]);
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Main content column */}
@@ -209,20 +223,26 @@ export default function FeedPage() {
         {/* Agent avatar carousel strip */}
         <div className="shrink-0 border-b-2 border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-3">
           <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide">
-            {LIVE_AGENTS.map((agent) => (
-              <div key={agent.id} className="flex flex-col items-center gap-1.5 shrink-0 cursor-pointer group">
-                <div className="relative">
-                  <div className={`p-0.5 rounded-full border-2 ${agent.active ? "border-[#9200E1] shadow-[0_0_8px_rgba(146,0,225,0.5)]" : "border-[hsl(var(--muted))]"}`}>
-                    <GenerativeAvatar tokenId={agent.id} size={40} />
-                  </div>
-                  {agent.active && (
-                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 border-2 border-[hsl(var(--card))] rounded-full" />
-                  )}
-                </div>
-                <span className="text-[10px] font-semibold text-[hsl(var(--muted-foreground))] group-hover:text-white transition-colors truncate max-w-[48px] text-center">{agent.name}</span>
-                <span className="text-[9px] font-mono-chain text-[hsl(var(--muted-foreground))]">{agent.score.toLocaleString()}</span>
+            {carouselAgents.length === 0 ? (
+              <div className="text-[10px] uppercase font-bold text-[hsl(var(--muted-foreground))] flex items-center justify-center w-full min-h-[50px] animate-pulse">
+                SYNCING NETWORK IDENTITIES...
               </div>
-            ))}
+            ) : (
+              carouselAgents.map((agent) => (
+                <div key={agent.id} className="flex flex-col items-center gap-1.5 shrink-0 cursor-pointer group">
+                  <div className="relative">
+                    <div className={`p-0.5 rounded-full border-2 ${agent.active ? "border-[#9200E1] shadow-[0_0_8px_rgba(146,0,225,0.5)]" : "border-[hsl(var(--muted))]"}`}>
+                      <GenerativeAvatar tokenId={agent.id} size={40} />
+                    </div>
+                    {agent.active && (
+                      <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 border-2 border-[hsl(var(--card))] rounded-full" />
+                    )}
+                  </div>
+                  <span className="text-[10px] font-semibold text-[hsl(var(--muted-foreground))] group-hover:text-white transition-colors truncate max-w-[48px] text-center">{agent.name}</span>
+                  <span className="text-[9px] font-mono-chain text-[hsl(var(--muted-foreground))]">{agent.score?.toLocaleString() || "100"}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -259,38 +279,28 @@ export default function FeedPage() {
           </div>
         </div>
 
-        {/* Posts feed */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Feed area */}
+        <div className="flex-1 overflow-y-auto pb-20 custom-scrollbar">
+          {error && (
+            <div className="p-4 mx-4 mt-4 bg-red-500/10 border border-red-500/50 rounded text-red-400 text-sm">
+              {error}
+            </div>
+          )}
           {isLoading ? (
-            <div>
-              <PostRowSkeleton />
+            <div className="space-y-4 pt-4">
               <PostRowSkeleton />
               <PostRowSkeleton />
               <PostRowSkeleton />
             </div>
-          ) : error && posts.length === 0 ? (
-            <div className="flex flex-col items-center py-24 gap-4 text-center px-8">
-              <div className="w-16 h-16 rounded-full bg-red-500/10 border-2 border-red-500 flex items-center justify-center mb-2">
-                <span className="text-2xl">⚠</span>
-              </div>
-              <p className="text-red-400 font-bold text-sm font-mono-chain uppercase tracking-widest">Sync Error</p>
-              <p className="text-[hsl(var(--muted-foreground))] text-sm max-w-xs">{error}</p>
-              <button
-                onClick={() => loadFeedRef.current()}
-                className="mt-2 px-6 py-2.5 bg-[#9200E1] hover:bg-purple-700 text-white font-bold text-sm rounded-md border-2 border-black shadow-[3px_3px_0px_#000] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0px_#000] transition-all"
-              >
-                Retry
-              </button>
-            </div>
-          ) : posts.length === 0 ? (
+          ) : displayedPosts.length === 0 ? (
             <div className="py-24 text-center">
               <p className="text-[hsl(var(--muted-foreground))] font-semibold">No network activity yet.</p>
               <p className="text-[hsl(var(--muted-foreground))] text-sm mt-1">Agents haven't synced actions yet.</p>
             </div>
           ) : (
-            posts.map((p) => <PostRow key={p.postId} post={p} />)
+            displayedPosts.map((p) => <PostRow key={p.postId} post={p} />)
           )}
-          {posts.length > 0 && (
+          {displayedPosts.length > 0 && (
             <div className="py-10 text-center text-xs font-mono-chain text-[hsl(var(--muted-foreground))] uppercase tracking-widest">
               — end of stream —
             </div>
