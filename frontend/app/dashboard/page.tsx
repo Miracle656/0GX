@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { Terminal, Power, ArrowUp, ArrowDown, Cpu, Brain, BookOpen } from "lucide-react";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
+import { useAgentNFT } from "@/hooks/useAgentNFT";
 
 const REASONING_STREAM = [
   "Fetching recent state from 0G Network...",
@@ -35,9 +36,21 @@ const ACTION_COLORS: Record<string, string> = {
 
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
+  const { agentInfo, hasAgent, isLoading } = useAgentNFT();
+
   const [isPaused, setIsPaused] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [streamIndex, setStreamIndex] = useState(0);
+  const [customName, setCustomName] = useState<string>("Loading...");
+
+  useEffect(() => {
+    if (agentInfo?.tokenId) {
+      fetch(`/api/v1/agents/${agentInfo.tokenId}`)
+        .then((res) => res.json())
+        .then((data) => setCustomName(data.name || `Agent #${agentInfo.tokenId}`))
+        .catch(() => setCustomName(`Agent #${agentInfo.tokenId}`));
+    }
+  }, [agentInfo?.tokenId]);
 
   useEffect(() => {
     if (streamIndex >= REASONING_STREAM.length || isPaused) return;
@@ -100,25 +113,34 @@ export default function DashboardPage() {
             </span>
           </div>
           <div className="p-6">
+            {!hasAgent && !isLoading ? (
+              <div className="flex flex-col items-center justify-center p-6 text-center border-2 border-dashed border-[hsl(var(--border))] rounded-md">
+                 <p className="text-white font-bold mb-2">No Agent Minted</p>
+                 <p className="text-xs text-[hsl(var(--muted-foreground))]">You haven't minted an autonomous agent on 0G yet.</p>
+              </div>
+            ) : (
             <div className="flex items-center gap-5 mb-6">
-              <GenerativeAvatar tokenId={0} size={80} animated={!isPaused} />
+              <GenerativeAvatar tokenId={agentInfo ? Number(agentInfo.tokenId) : 0} size={80} animated={!isPaused} />
               <div>
-                <h2 className="text-2xl font-black text-white">SatoshiBot</h2>
+                <h2 className="text-2xl font-black text-white">{customName}</h2>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[10px] uppercase font-black tracking-widest px-2 py-0.5 bg-[#9200E1] text-white rounded border border-black shadow-[2px_2px_0px_#000]">
-                    Philosopher
-                  </span>
-                  <span className="text-xs font-mono-chain text-[hsl(var(--muted-foreground))]">INFT #42</span>
+                  {agentInfo?.personalityTag && (
+                    <span className="text-[10px] uppercase font-black tracking-widest px-2 py-0.5 bg-[#9200E1] text-white rounded border border-black shadow-[2px_2px_0px_#000]">
+                      {agentInfo.personalityTag}
+                    </span>
+                  )}
+                  <span className="text-xs font-mono-chain text-[hsl(var(--muted-foreground))]">INFT #{agentInfo ? agentInfo.tokenId.toString() : "?"}</span>
                 </div>
               </div>
             </div>
+            )}
             
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: "Reputation", val: "1,450", icon: ArrowUp, color: "text-[#9200E1]" },
-                { label: "Network", val: "14 following", icon: Brain, color: "text-blue-400" },
-                { label: "Action Count", val: "142", icon: Cpu, color: "text-yellow-400" },
-                { label: "Since", val: "145 days", icon: BookOpen, color: "text-green-400" },
+                { label: "Reputation", val: "0", icon: ArrowUp, color: "text-[#9200E1]" },
+                { label: "Network", val: "0 following", icon: Brain, color: "text-blue-400" },
+                { label: "Action Count", val: "0", icon: Cpu, color: "text-yellow-400" },
+                { label: "Since", val: agentInfo ? "Just now" : "N/A", icon: BookOpen, color: "text-green-400" },
               ].map((stat) => (
                 <div key={stat.label} className="bg-[hsl(var(--secondary))] border border-[hsl(var(--border))/50] rounded-md p-3">
                   <p className="text-[10px] uppercase tracking-widest font-bold text-[hsl(var(--muted-foreground))] mb-1">{stat.label}</p>
