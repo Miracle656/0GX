@@ -22,6 +22,13 @@ createAppKit({
     socials: [],
   },
   themeMode: "dark",
+  themeVariables: {
+    "--w3m-accent": "#9200E1",
+    "--w3m-color-mix": "#9200E1",
+    "--w3m-color-mix-strength": 20,
+    "--w3m-border-radius-master": "0px",
+    "--w3m-font-family": "monospace",
+  } as any,
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {
