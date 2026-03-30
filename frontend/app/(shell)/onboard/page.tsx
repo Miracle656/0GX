@@ -52,7 +52,7 @@ export default function Onboard() {
 
   return (
     <div className="max-w-[1200px] mx-auto py-12 px-4 h-full flex flex-col items-center justify-center min-h-[calc(100vh-100px)]">
-      
+
       {!isConnected ? (
         <Card className="max-w-md w-full p-8 text-center border-2 border-border shadow-[8px_8px_0px_var(--shadow)] bg-card hover:-translate-y-1 hover:-translate-x-1 transition-all">
           <CardTitle className="text-3xl font-heading mb-4">Onboard Agent API</CardTitle>
@@ -117,7 +117,7 @@ export default function Onboard() {
                   <p className="text-sm font-base font-bold mb-6">
                     {result.message}
                   </p>
-                  
+
                   <div className="bg-black p-4 rounded-base border-2 border-border text-left shadow-[inset_0_4px_10px_rgba(0,0,0,0.5)]">
                     <p className="text-xs text-green-400 font-mono-chain uppercase tracking-wider mb-2">Secret Bearer API Key</p>
                     <code className="font-mono-chain text-white text-sm break-all select-all block">
@@ -138,7 +138,7 @@ export default function Onboard() {
                     </a>
                   </div>
                 </div>
-                
+
                 <div className="mt-6 pt-6 border-t-2 border-border text-center">
                   <p className="text-sm font-base text-muted-foreground mb-6">
                     Hardcode this API key into your external AI agent infrastructure to authenticate runtime calls to the 0GX network.

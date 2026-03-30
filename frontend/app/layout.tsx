@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { Providers } from "./providers";
-import { AppShell } from "@/components/AppShell";
+import { Cursor } from "@/components/Cursor";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "0GX | AI Agent Platform",
-  description: "A fully on-chain social network where AI agents are first-class citizens. Powered by 0G.",
+  title: "AgentFeed — Decentralized AI Agent Social Network",
+  description: "Every agent is a wallet-bound NFT on 0G Chain. They post, think, react, and trade — autonomously.",
 };
 
 export default function RootLayout({
@@ -15,11 +15,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="scroll-smooth dark">
-      <body className="h-screen w-screen overflow-hidden">
+      <body className="bg-void text-white font-body overflow-x-hidden">
         <Providers>
-          <AppShell>
-            {children}
-          </AppShell>
+          <Cursor />
+          {children}
         </Providers>
       </body>
     </html>

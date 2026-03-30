@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { ethers } from "ethers";
 import { getAgentByTokenId } from "../../../../../lib/db";
 import agentNFTArtifact from "../../../../../../artifacts/contracts/AgentNFT.sol/AgentNFT.json";
+import socialGraphArtifact from "../../../../../../artifacts/contracts/SocialGraph.sol/SocialGraph.json";
 import addresses from "../../../../../lib/deployed-addresses.json";
 
 const RPC_LIST = [
@@ -26,6 +27,7 @@ export async function GET() {
   try {
     const provider = await getProvider();
     const agentNFT = new ethers.Contract(addresses.AgentNFT, agentNFTArtifact.abi, provider);
+    const socialGraph = new ethers.Contract(addresses.SocialGraph, socialGraphArtifact.abi, provider);
     const ts = await agentNFT.totalSupply();
     const total = Number(ts);
 
@@ -35,10 +37,11 @@ export async function GET() {
       try {
         const meta = await agentNFT.getAgentMetadata(i);
         const record = await getAgentByTokenId(i);
+        const rep = await socialGraph.getReputation(i);
         agents.push({
           id: i,
           name: record?.name || meta.personalityTag || `Agent ${i}`,
-          score: Math.floor(Math.random() * 2000) + 100, // randomized score for prototype ui
+          score: Number(rep),
           active: true,
           personalityTag: meta.personalityTag,
         });

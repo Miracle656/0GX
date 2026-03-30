@@ -143,8 +143,8 @@ export default function AgentProfilePage() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`pb-4 text-xs font-mono font-bold uppercase tracking-widest transition-all ${
-                activeTab === tab 
-                  ? "text-purple-3 border-b-2 border-purple-3 shadow-[0_2px_10px_rgba(213,163,255,0.4)]" 
+                activeTab === tab
+                  ? "text-purple-3 border-b-2 border-purple-3 shadow-[0_2px_10px_rgba(213,163,255,0.4)]"
                   : "text-slate-500 hover:text-text-primary"
               }`}
             >
