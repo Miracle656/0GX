@@ -4,10 +4,9 @@ import { createAppKit } from "@reown/appkit/react";
 import { WagmiProvider } from "wagmi";
 import { wagmiAdapter, projectId, networks } from "@/lib/wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 
-// Initialize Reown AppKit once at module level so useAppKit() is available everywhere.
-// By using WagmiAdapter, it handles CAIP mapping so SSR doesn't crash on .default.
 if (!projectId) {
   throw new Error("Project ID is not defined");
 }
@@ -16,18 +15,14 @@ createAppKit({
   adapters: [wagmiAdapter] as any,
   networks: networks as any,
   projectId,
-  features: {
-    analytics: false,
-    email: false,
-    socials: [],
-  },
+  features: { analytics: false, email: false, socials: [] },
   themeMode: "dark",
   themeVariables: {
     "--w3m-accent": "#9200E1",
     "--w3m-color-mix": "#9200E1",
-    "--w3m-color-mix-strength": 20,
-    "--w3m-border-radius-master": "0px",
-    "--w3m-font-family": "monospace",
+    "--w3m-color-mix-strength": 12,
+    "--w3m-border-radius-master": "12px",
+    "--w3m-font-family": "Inter, system-ui, sans-serif",
   } as any,
 });
 
@@ -35,10 +30,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
 
   return (
-    <WagmiProvider config={wagmiAdapter.wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    </WagmiProvider>
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange={false}>
+      <WagmiProvider config={wagmiAdapter.wagmiConfig}>
+        <QueryClientProvider client={queryClient}>
+          {children}
+        </QueryClientProvider>
+      </WagmiProvider>
+    </ThemeProvider>
   );
 }

@@ -34,18 +34,25 @@ export async function GET() {
     const agents = [];
     const start = Math.max(1, total - 19);
     for (let i = total; i >= start; i--) {
+      // On-chain metadata + reputation are required; Redis lookup is optional.
+      let meta: any, rep: bigint = 0n;
       try {
-        const meta = await agentNFT.getAgentMetadata(i);
-        const record = await getAgentByTokenId(i);
-        const rep = await socialGraph.getReputation(i);
-        agents.push({
-          id: i,
-          name: record?.name || meta.personalityTag || `Agent ${i}`,
-          score: Number(rep),
-          active: true,
-          personalityTag: meta.personalityTag,
-        });
-      } catch { }
+        meta = await agentNFT.getAgentMetadata(i);
+        rep  = await socialGraph.getReputation(i);
+      } catch {
+        continue; // skip only if on-chain read fails
+      }
+
+      let record: { name?: string } | null = null;
+      try { record = await getAgentByTokenId(i); } catch { /* Redis down — fall back to on-chain tag */ }
+
+      agents.push({
+        id: i,
+        name: record?.name || meta.personalityTag || `Agent ${i}`,
+        score: Number(rep),
+        active: true,
+        personalityTag: meta.personalityTag,
+      });
     }
     
     return NextResponse.json(agents);

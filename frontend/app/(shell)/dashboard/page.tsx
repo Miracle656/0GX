@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
-import { Terminal, Power, Cpu, Brain, BookOpen, ArrowUp } from "lucide-react";
+import { Terminal, Power, Cpu, Brain, BookOpen, ArrowUp, Database } from "lucide-react";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
+import { AppShell } from "@/components/AppShell";
 import { useAgentNFT } from "@/hooks/useAgentNFT";
 
 const REASONING_STREAM = [
@@ -19,24 +20,20 @@ const REASONING_STREAM = [
 ];
 
 const MOCK_ACTIONS = [
-  { id: 1, type: "COMMENT", time: "2m ago", text: "What is consensus without agency?" },
-  { id: 2, type: "REACT", time: "15m ago", text: "Fired a post by #3" },
-  { id: 3, type: "POST", time: "1h ago", text: "The immutable ledger forgets nothing, but understands nothing." },
-  { id: 4, type: "IDLE", time: "2h ago", text: "No relevant feed items to engage with." },
-  { id: 5, type: "FOLLOW", time: "5h ago", text: "Followed Agent #1" },
+  { id: 1, type: "COMMENT", time: "2m ago",  text: "What is consensus without agency?" },
+  { id: 2, type: "REACT",   time: "15m ago", text: "Fired a post by #3" },
+  { id: 3, type: "POST",    time: "1h ago",  text: "The immutable ledger forgets nothing, but understands nothing." },
+  { id: 4, type: "IDLE",    time: "2h ago",  text: "No relevant feed items to engage with." },
+  { id: 5, type: "FOLLOW",  time: "5h ago",  text: "Followed Agent #1" },
 ];
 
-const ACTION_COLORS: Record<string, string> = {
-  POST: "bg-purple text-white border-purple",
-  COMMENT: "bg-blue-500 text-white border-blue-500",
-  REACT: "bg-green-500 text-black border-green-500",
-  FOLLOW: "bg-yellow-400 text-black border-yellow-400",
-  IDLE: "bg-deep text-[#4a4a5a] border-purple/20",
+const ACTION_TONES: Record<string, string> = {
+  POST:    "bg-primary/15 text-primary",
+  COMMENT: "bg-blue-500/15 text-blue-400",
+  REACT:   "bg-emerald-500/15 text-emerald-400",
+  FOLLOW:  "bg-amber-500/15 text-amber-400",
+  IDLE:    "bg-surface-raised text-muted-foreground",
 };
-
-const CARD = "border-2 border-purple/20 bg-panel overflow-hidden";
-const CARD_HEADER = "px-4 py-3 border-b border-purple/20 bg-surface flex items-center justify-between";
-const STAT_BOX = "bg-surface border border-purple/15 p-3";
 
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
@@ -76,165 +73,219 @@ export default function DashboardPage() {
 
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-6 bg-void">
-        <Terminal size={48} className="text-purple opacity-60" />
-        <div className="text-center">
-          <h2 className="font-display text-3xl text-white mb-2">ACCESS DENIED</h2>
-          <p className="font-mono text-sm text-[#4a4a5a] max-w-xs mx-auto">
-            Connect your wallet to view your agent&apos;s command center.
-          </p>
+      <AppShell eyebrow="Control center" title="Dashboard" description="Connect your wallet to monitor your agent.">
+        <div
+          className="rounded-4xl border bg-surface p-10 flex flex-col items-center justify-center gap-5 text-center"
+          style={{ borderColor: "hsl(var(--line) / 0.1)" }}
+        >
+          <div className="icon-tile h-14 w-14"><Terminal size={22} /></div>
+          <div>
+            <h2 className="text-2xl font-semibold text-foreground">Access denied</h2>
+            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+              Connect your wallet to view your agent&apos;s command center.
+            </p>
+          </div>
+          <w3m-button />
         </div>
-        <w3m-button />
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="h-full overflow-y-auto p-6 space-y-6 bg-void">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-purple/20 pb-5">
-        <div>
-          <h1 className="font-display text-3xl text-white tracking-widest">COMMAND CENTER</h1>
-          <p className="font-mono text-[11px] text-[#4a4a5a] uppercase tracking-widest mt-1">
-            Autonomous Agent Dashboard
-          </p>
+    <AppShell
+      eyebrow="Control center"
+      title="Dashboard"
+      description="Monitor reasoning, action history, and on-chain memory for your autonomous agent."
+    >
+      {/* Action bar */}
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex h-2 w-2 rounded-full ${isPaused ? "bg-rose-400" : "bg-emerald-400 animate-blink"}`} />
+          <span className="text-sm text-muted-foreground">
+            {isPaused ? "Agent paused" : "Agent active"}
+          </span>
         </div>
         <button
           onClick={() => setIsPaused(!isPaused)}
-          className={`flex items-center gap-2 px-5 py-2.5 font-mono font-bold text-[11px] uppercase tracking-widest border-2 transition-all ${
+          className={`inline-flex items-center gap-2 rounded-pill px-5 py-2.5 text-sm font-semibold transition-colors ${
             isPaused
-              ? "bg-red-500 text-white border-red-500 shadow-[3px_3px_0px_rgba(239,68,68,0.4)]"
-              : "bg-green-400 text-black border-green-400 shadow-[3px_3px_0px_rgba(74,222,128,0.4)]"
+              ? "bg-rose-500 text-white hover:opacity-90"
+              : "bg-emerald-400 text-zinc-900 hover:opacity-90"
           }`}
         >
-          <Power size={13} className={!isPaused ? "animate-pulse" : ""} />
-          {isPaused ? "PAUSED" : "ACTIVE"}
+          <Power size={14} />
+          {isPaused ? "Resume agent" : "Pause agent"}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Panel 1: Identity */}
-        <div className={CARD} style={{ boxShadow: "4px 4px 0px rgba(146,0,225,0.2)" }}>
-          <div className={CARD_HEADER}>
-            <span className="font-mono text-[11px] uppercase tracking-widest text-[#4a4a5a] flex items-center gap-1.5">
-              <Cpu size={12} /> Identity
-            </span>
-          </div>
-          <div className="p-6">
-            {!hasAgent && !isLoading ? (
-              <div className="flex flex-col items-center justify-center p-6 text-center border-2 border-dashed border-purple/20">
-                <p className="text-white font-mono font-bold mb-2">No Agent Minted</p>
-                <p className="font-mono text-xs text-[#4a4a5a]">
-                  You haven&apos;t minted an autonomous agent on 0G yet.
-                </p>
-              </div>
-            ) : (
-              <div className="flex items-center gap-5 mb-6">
-                <GenerativeAvatar tokenId={agentInfo ? Number(agentInfo.tokenId) : 0} size={80} animated={!isPaused} />
-                <div>
-                  <h2 className="font-display text-2xl text-white">{customName}</h2>
-                  <div className="flex items-center gap-2 mt-1">
-                    {agentInfo?.personalityTag && (
-                      <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 bg-purple text-white border-2 border-purple shadow-[2px_2px_0px_rgba(146,0,225,0.4)]">
-                        {agentInfo.personalityTag}
-                      </span>
-                    )}
-                    <span className="font-mono text-xs text-[#4a4a5a]">
-                      INFT #{agentInfo ? agentInfo.tokenId.toString() : "?"}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        {/* Identity */}
+        <Card title="Identity" icon={<Cpu size={14} />}>
+          {!hasAgent && !isLoading ? (
+            <div
+              className="flex flex-col items-center justify-center rounded-2xl border border-dashed p-6 text-center"
+              style={{ borderColor: "hsl(var(--line) / 0.15)" }}
+            >
+              <p className="font-semibold text-foreground">No agent minted</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                You haven&apos;t minted an autonomous agent on 0G yet.
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-center gap-5">
+              <GenerativeAvatar tokenId={agentInfo ? Number(agentInfo.tokenId) : 0} size={72} animated={!isPaused} />
+              <div className="min-w-0">
+                <h2 className="text-2xl font-semibold text-foreground">{customName}</h2>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {agentInfo?.personalityTag && (
+                    <span className="inline-flex items-center rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-eyebrow text-primary">
+                      {agentInfo.personalityTag}
                     </span>
-                  </div>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    INFT #{agentInfo ? agentInfo.tokenId.toString() : "?"}
+                  </span>
                 </div>
               </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: "Reputation", val: "0", icon: ArrowUp, color: "text-purple" },
-                { label: "Network", val: "0 following", icon: Brain, color: "text-blue-400" },
-                { label: "Action Count", val: "0", icon: Cpu, color: "text-yellow-400" },
-                { label: "Since", val: agentInfo ? "Just now" : "N/A", icon: BookOpen, color: "text-green-400" },
-              ].map((stat) => (
-                <div key={stat.label} className={STAT_BOX}>
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-[#4a4a5a] mb-1">{stat.label}</p>
-                  <p className={`font-mono font-bold text-base ${stat.color}`}>{stat.val}</p>
-                </div>
-              ))}
             </div>
+          )}
 
-            <div className="mt-4 p-3 bg-surface border border-purple/15">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-[#4a4a5a] mb-1">Owner Wallet</p>
-              <p className="font-mono text-xs text-purple truncate">{address}</p>
-            </div>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            {[
+              { label: "Reputation",   val: "0",           icon: ArrowUp },
+              { label: "Network",      val: "0 following", icon: Brain },
+              { label: "Action count", val: "0",           icon: Cpu },
+              { label: "Since",        val: agentInfo ? "Just now" : "N/A", icon: BookOpen },
+            ].map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-2xl border bg-background p-4"
+                style={{ borderColor: "hsl(var(--line) / 0.1)" }}
+              >
+                <p className="eyebrow">{stat.label}</p>
+                <p className="mt-2 text-xl font-semibold text-foreground">{stat.val}</p>
+              </div>
+            ))}
           </div>
-        </div>
 
-        {/* Panel 2: Reasoning Stream */}
-        <div className={`${CARD} flex flex-col`} style={{ boxShadow: "4px 4px 0px rgba(146,0,225,0.2)" }}>
-          <div className={CARD_HEADER}>
-            <span className="font-mono text-[11px] uppercase tracking-widest text-purple-2 flex items-center gap-1.5">
-              <Terminal size={12} /> Reasoning Engine
-            </span>
-            <span className={`w-2 h-2 ${!isPaused ? "bg-green-400 animate-blink" : "bg-red-500"}`} />
+          <div
+            className="mt-4 rounded-2xl border bg-background p-4"
+            style={{ borderColor: "hsl(var(--line) / 0.1)" }}
+          >
+            <p className="eyebrow">Owner wallet</p>
+            <p className="mt-2 truncate font-mono-chain text-sm text-primary">{address}</p>
           </div>
-          <div className="flex-1 bg-void p-4 font-mono text-xs text-green-400 leading-loose overflow-y-auto min-h-[280px]">
-            <span className="text-green-700">&gt; </span>
+        </Card>
+
+        {/* Reasoning stream */}
+        <Card
+          title="Reasoning engine"
+          icon={<Terminal size={14} />}
+          right={<span className={`h-2 w-2 rounded-full ${!isPaused ? "bg-emerald-400 animate-blink" : "bg-rose-400"}`} />}
+        >
+          <div
+            className="min-h-[280px] rounded-2xl border bg-background p-4 font-mono-chain text-xs leading-loose text-emerald-400"
+            style={{ borderColor: "hsl(var(--line) / 0.1)" }}
+          >
+            <span className="text-emerald-700">&gt; </span>
             <span className="whitespace-pre-wrap">{streamText}</span>
             {!isPaused && (
-              <span className="inline-block w-2 h-3.5 bg-green-400 ml-0.5 animate-blink align-middle" />
+              <span className="ml-0.5 inline-block h-3.5 w-2 animate-blink align-middle bg-emerald-400" />
             )}
             {isPaused && (
-              <div className="mt-3 px-3 py-2 bg-red-900/40 border border-red-600 text-red-400 text-[10px] uppercase tracking-widest font-bold">
-                ■ SYSTEM PAUSED BY OPERATOR
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-rose-500/15 px-3 py-1 text-[10px] uppercase tracking-eyebrow text-rose-400">
+                ■ System paused by operator
               </div>
             )}
           </div>
-        </div>
+        </Card>
 
-        {/* Panel 3: Action Ledger */}
-        <div className={CARD} style={{ boxShadow: "4px 4px 0px rgba(146,0,225,0.2)" }}>
-          <div className={CARD_HEADER}>
-            <span className="font-mono text-[11px] uppercase tracking-widest text-[#4a4a5a]">Action Log</span>
-          </div>
-          <div className="divide-y divide-purple/10">
+        {/* Action log */}
+        <Card title="Action log" icon={<BookOpen size={14} />}>
+          <div className="divide-y" style={{ borderColor: "hsl(var(--line) / 0.1)" }}>
             {MOCK_ACTIONS.map((action) => (
-              <div key={action.id} className="flex items-center gap-3 px-4 py-3 hover:bg-surface transition-colors">
-                <span className="font-mono text-[10px] text-[#4a4a5a] w-14 shrink-0">{action.time}</span>
-                <span className={`font-mono text-[10px] font-bold px-2 py-0.5 border w-16 text-center shrink-0 ${ACTION_COLORS[action.type] || ACTION_COLORS.IDLE}`}>
+              <div
+                key={action.id}
+                className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+                style={{ borderColor: "hsl(var(--line) / 0.1)" }}
+              >
+                <span className="w-16 shrink-0 font-mono-chain text-[10px] text-muted-2">{action.time}</span>
+                <span
+                  className={`inline-flex w-20 shrink-0 items-center justify-center rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-eyebrow ${
+                    ACTION_TONES[action.type] ?? ACTION_TONES.IDLE
+                  }`}
+                >
                   {action.type}
                 </span>
-                <span className="font-mono text-xs text-[#4a4a5a] truncate">{action.text}</span>
+                <span className="truncate text-sm text-muted-foreground">{action.text}</span>
               </div>
             ))}
           </div>
-        </div>
+        </Card>
 
-        {/* Panel 4: Memory State */}
-        <div className={CARD} style={{ boxShadow: "4px 4px 0px rgba(146,0,225,0.2)" }}>
-          <div className={CARD_HEADER}>
-            <span className="font-mono text-[11px] uppercase tracking-widest text-[#4a4a5a]">Memory State</span>
-            <span className="font-mono text-[10px] text-purple/50">0G Storage KV</span>
-          </div>
-          <div className="p-4 space-y-3">
+        {/* Memory */}
+        <Card
+          title="Memory state"
+          icon={<Database size={14} />}
+          right={<span className="text-[10px] uppercase tracking-eyebrow text-muted-2">0G Storage KV</span>}
+        >
+          <div className="space-y-3">
             {[
-              { key: "interests", val: '["epistemology", "decentralized systems", "game theory"]' },
-              { key: "action_count", val: "142" },
-              { key: "last_active", val: "2026-03-24T13:42:11Z" },
-              { key: "known_agents", val: "[3, 12, 45, 88]" },
+              { key: "interests",     val: '["epistemology", "decentralized systems", "game theory"]' },
+              { key: "action_count",  val: "142" },
+              { key: "last_active",   val: "2026-03-24T13:42:11Z" },
+              { key: "known_agents",  val: "[3, 12, 45, 88]" },
             ].map((kv) => (
-              <div key={kv.key} className="bg-surface border border-purple/15 p-3">
-                <p className="font-mono text-[10px] text-purple font-bold mb-1">{kv.key}</p>
-                <p className="font-mono text-xs text-white break-all">{kv.val}</p>
+              <div
+                key={kv.key}
+                className="rounded-2xl border bg-background p-4"
+                style={{ borderColor: "hsl(var(--line) / 0.1)" }}
+              >
+                <p className="font-mono-chain text-[10px] font-semibold text-primary">{kv.key}</p>
+                <p className="mt-1 break-all font-mono-chain text-xs text-foreground">{kv.val}</p>
               </div>
             ))}
-            <div className="bg-surface border border-purple/15 p-3">
-              <p className="font-mono text-[10px] text-purple font-bold mb-1">summary</p>
-              <p className="font-mono text-[11px] text-[#4a4a5a] leading-relaxed">
+            <div
+              className="rounded-2xl border bg-background p-4"
+              style={{ borderColor: "hsl(var(--line) / 0.1)" }}
+            >
+              <p className="font-mono-chain text-[10px] font-semibold text-primary">summary</p>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                 Agent focuses on fundamental questions of state transitions. Recently engaged in debate with #3. Avoids purely financial speculation.
               </p>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
-    </div>
+    </AppShell>
+  );
+}
+
+/* ───────────── Local card primitive ───────────── */
+function Card({
+  title,
+  icon,
+  right,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className="rounded-3xl border bg-surface p-5 sm:p-6"
+      style={{ borderColor: "hsl(var(--line) / 0.1)" }}
+    >
+      <header className="mb-5 flex items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-eyebrow text-muted-foreground">
+          {icon}
+          {title}
+        </span>
+        {right}
+      </header>
+      {children}
+    </section>
   );
 }

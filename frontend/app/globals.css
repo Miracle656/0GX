@@ -2,156 +2,193 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Geist+Mono:wght@400;500;700&display=swap');
-
-/* Geist Mono from Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;700&display=swap');
 
-/* Regola Pro — fallback gracefully */
 @font-face {
-  font-family: 'Regola Pro';
-  src: local('Regola Pro'), local('RegolaPro');
+  font-family: 'Satoshi-Variable';
+  src: url('/fonts/Satoshi-Variable.woff2') format('woff2');
+  font-weight: 300 900;
   font-display: swap;
+  font-style: normal;
 }
 
 @layer base {
-  :root {
-    /* Neobrutalism core tokens */
-    --main: #9200E1;
-    --main-foreground: #FEFEFE;
+  /* ─────────────────────────────────────────────────────────────
+     DARK MODE (default) — iWallet-style flat charcoal, 0G purple
+     ───────────────────────────────────────────────────────────── */
+  :root,
+  .dark {
+    --background:           220 8% 7%;       /* #101113 */
+    --foreground:           198 26% 92%;     /* #e5eef1 */
 
-    /* Charcoal dark palette (not pitch black) */
-    --bg: #1a1a2e;
-    --bw: #ffffff;
-    --blank: #111120;
-    --border: #9200E1;
-    --text: #f0f0f6;
-    --shadow: #9200E1;
-    --radius: 6px;
+    --surface:              220 8% 9%;       /* #131416 */
+    --surface-raised:       230 8% 15%;      /* #222328 */
 
-    /* Shadcn-compatible HSL */
-    --background: 240 30% 8%;         /* deep charcoal with slight blue-purple tint */
-    --foreground: 240 10% 96%;
-    --card: 240 25% 11%;              /* slightly lighter than background */
-    --card-foreground: 240 10% 96%;
-    --popover: 240 25% 11%;
-    --popover-foreground: 240 10% 96%;
-    --primary: 275 100% 44%;          /* 0G purple */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 20% 18%;
-    --secondary-foreground: 240 10% 80%;
-    --muted: 240 20% 18%;
-    --muted-foreground: 240 8% 55%;
-    --accent: 275 80% 30%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 85% 60%;
+    --card:                 220 8% 9%;
+    --card-foreground:      198 26% 92%;
+
+    --popover:              220 8% 9%;
+    --popover-foreground:   198 26% 92%;
+
+    --primary:              275 100% 44%;    /* 0G #9200E1 */
+    --primary-foreground:   0 0% 100%;
+
+    --secondary:            230 8% 15%;
+    --secondary-foreground: 198 26% 92%;
+
+    --muted:                230 8% 15%;
+    --muted-foreground:     215 5% 60%;      /* #92979d */
+    --muted-2:              218 5% 46%;      /* #6f747a */
+
+    --accent:               275 100% 60%;
+    --accent-foreground:    0 0% 100%;
+
+    --destructive:          0 75% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 275 60% 40%;
-    --input: 240 20% 18%;
-    --ring: 275 100% 44%;
-    --secondary-background: 240 25% 10%;
+
+    --line:                 0 0% 100%;       /* used with /10 alpha */
+    --border:               0 0% 100%;
+    --input:                230 8% 15%;
+    --ring:                 275 100% 60%;
+
+    --radius: 1.6rem;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     LIGHT MODE — soft lavender-white surfaces, deep purple accent
+     ───────────────────────────────────────────────────────────── */
+  .light {
+    --background:           260 25% 98%;     /* #f7f5fb */
+    --foreground:           220 12% 12%;     /* near black */
+
+    --surface:              0 0% 100%;       /* pure white card */
+    --surface-raised:       260 20% 95%;     /* soft chip */
+
+    --card:                 0 0% 100%;
+    --card-foreground:      220 12% 12%;
+
+    --popover:              0 0% 100%;
+    --popover-foreground:   220 12% 12%;
+
+    --primary:              275 100% 44%;    /* 0G #9200E1 — same in both */
+    --primary-foreground:   0 0% 100%;
+
+    --secondary:            260 20% 95%;
+    --secondary-foreground: 220 12% 18%;
+
+    --muted:                260 20% 95%;
+    --muted-foreground:     220 8% 42%;
+    --muted-2:              220 6% 58%;
+
+    --accent:               275 80% 55%;
+    --accent-foreground:    0 0% 100%;
+
+    --destructive:          0 75% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --line:                 220 12% 12%;     /* used with /10 alpha */
+    --border:               220 12% 12%;
+    --input:                260 20% 95%;
+    --ring:                 275 100% 44%;
   }
 }
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: hsl(var(--line) / 0.1);
   }
+  html { scroll-behavior: smooth; scroll-padding-top: 96px; }
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
+    @apply bg-background text-foreground antialiased min-h-screen;
+    font-family: 'Satoshi-Variable', Inter, system-ui, sans-serif;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.5);
+    color: hsl(var(--primary-foreground));
+  }
+  a, button, [role="button"], [data-hover-trigger] { cursor: pointer; }
+  button:disabled, [aria-disabled="true"] { cursor: not-allowed; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Component utilities — iWallet flat-dark patterns
+   ───────────────────────────────────────────────────────────── */
+@layer components {
+  /* Hairline-bordered card on dark/light surface */
+  .card-flat {
+    border: 1px solid hsl(var(--line) / 0.1);
+    background-color: hsl(var(--surface));
+  }
+  .card-flat-bare {
+    border: 1px solid hsl(var(--line) / 0.1);
+  }
+
+  /* Pill primary CTA — 0G purple */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-pill
+           bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground
+           transition-colors hover:opacity-90 active:opacity-80;
+  }
+  .btn-primary-lg {
+    @apply btn-primary px-8 py-4;
+  }
+
+  /* Pill secondary — hairline border */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-pill
+           border px-4 py-2 text-sm font-medium text-foreground
+           transition-colors hover:text-primary;
+    border-color: hsl(var(--line) / 0.1);
+  }
+
+  /* Pill nav link */
+  .nav-pill {
+    @apply rounded-pill px-3 py-2 text-sm font-medium text-muted-foreground
+           transition-colors hover:text-foreground;
+  }
+  .nav-pill-active {
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--surface-raised));
+  }
+
+  /* Icon tile — like the wallet/logo chip */
+  .icon-tile {
+    @apply grid place-items-center rounded-2xl border border-white/10 bg-surface-raised text-primary;
+  }
+
+  /* Eyebrow label */
+  .eyebrow {
+    @apply text-xs font-medium uppercase tracking-eyebrow text-muted-foreground;
+  }
+
+  /* Big numeric display */
+  .num-display {
+    @apply text-5xl font-light tracking-tightest sm:text-6xl text-foreground;
   }
 }
 
-/* Geist Mono for on-chain data */
+/* ─────────────────────────────────────────────────────────────
+   Scrollbar — minimal
+   ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--line) / 0.15);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary) / 0.5); }
+
 .font-mono-chain {
-  font-family: 'Geist Mono', 'Consolas', monospace;
+  font-family: 'Geist Mono', monospace;
   letter-spacing: -0.01em;
+  font-feature-settings: "tnum", "zero";
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: hsl(var(--background)); }
-::-webkit-scrollbar-thumb { background: hsl(var(--muted)); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary)); }
-
-/* Subtle grid background for sections */
-.grid-bg {
-  background-image: 
-    linear-gradient(rgba(146, 0, 225, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(146, 0, 225, 0.04) 1px, transparent 1px);
-  background-size: 24px 24px;
+/* Theme transition shim */
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease !important;
+  transition-delay: 0 !important;
 }
-
-/* Blink animation */
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-.animate-blink { animation: blink 1.2s ease-in-out infinite; }
-
-/* Hard neobrutalism shadow helpers */
-.neo-card { 
-  border: 2px solid hsl(var(--border));
-  box-shadow: 4px 4px 0px rgba(146, 0, 225, 0.5);
-  transition: box-shadow 0.15s, transform 0.15s;
-}
-.neo-card:hover {
-  box-shadow: 6px 6px 0px rgba(146, 0, 225, 0.7);
-  transform: translate(-1px, -1px);
-}
-.neo-card-hard {
-  border: 2px solid #000;
-  box-shadow: 4px 4px 0px #000;
-}
-
-/* Vote arrow styles */
-.vote-up { color: hsl(var(--muted-foreground)); transition: color 0.15s; }
-.vote-up:hover, .vote-up.active { color: #9200E1; }
-.vote-down { color: hsl(var(--muted-foreground)); transition: color 0.15s; }
-.vote-down:hover, .vote-down.active { color: #4494ff; }
-
-/* Landing page noise overlay */
-.noise-overlay::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* Landing scrollbar */
-.landing-scroll::-webkit-scrollbar { width: 4px; }
-.landing-scroll::-webkit-scrollbar-track { background: #000; }
-.landing-scroll::-webkit-scrollbar-thumb { background: #9200E1; }
-
-/* ─── Landing page keyframes ───────────────────────────────────────────────
-   Defined here (not just tailwind.config) so inline animation: references work.
-   Tailwind only emits @keyframes when the matching animate-* class appears in
-   scanned markup; inline style animations bypass that scan. ─────────────── */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(28px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes gridDrift {
-  from { transform: translateY(0); }
-  to   { transform: translateY(80px); }
-}
-@keyframes blobFloat {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50%       { transform: translate(20px, -15px) scale(1.04); }
-}
-@keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 20px rgba(146,0,225,0.4); }
-  50%       { box-shadow: 0 0 60px rgba(146,0,225,0.8); }
-}
-@keyframes spinSlow    { from { transform: rotate(0deg); }   to { transform: rotate(360deg); } }
-@keyframes spinReverse { from { transform: rotate(0deg); }   to { transform: rotate(-360deg); } }
-@keyframes tickerScroll  { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-@keyframes marqueeScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-
-/* Scroll-padding so fixed navbar never hides section tops */
-html { scroll-padding-top: 80px; }
