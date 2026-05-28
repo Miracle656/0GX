@@ -196,10 +196,10 @@ export async function relayerMintAgent(
   walletAddress: string,
   name: string,
   personality: string
-): Promise<{ hash: string; tokenId: number }> {
+): Promise<{ hash: string; tokenId: number; delegatedAddress?: string }> {
   // Mint must be signed by the deployer/admin (MINTER_ROLE on AgentNFT) —
   // the per-agent wallet doesn't yet exist for an unminted token.
-  const { agentNFT } = await getDeployerContracts();
+  const { agentNFT, wallet: deployerWallet } = await getDeployerContracts();
   
   const metadataConfig = {
     name,
@@ -229,7 +229,7 @@ export async function relayerMintAgent(
   );
   
   const receipt = await tx.wait();
-  
+
   // Find AgentMinted event to extract tokenId
   let tokenId = 0;
   for (const log of receipt.logs) {
@@ -241,6 +241,35 @@ export async function relayerMintAgent(
       }
     } catch { }
   }
-  
-  return { hash: tx.hash, tokenId };
+
+  // Set up the per-agent delegated wallet for the new tokenId. Best-effort:
+  // if either step fails the user still has a valid INFT — they just won't
+  // get attribution until the migration script is re-run.
+  let delegatedAddress: string | undefined;
+  if (tokenId > 0) {
+    try {
+      const provider = await getProvider();
+      const delegated = getAgentSigner(tokenId, provider);
+      delegatedAddress = delegated.address;
+
+      // Top up gas if the new wallet is empty
+      const bal = await provider.getBalance(delegated.address);
+      if (bal < ethers.parseEther("0.01")) {
+        const fundTx = await deployerWallet.sendTransaction({
+          to: delegated.address,
+          value: ethers.parseEther("0.05"),
+        });
+        await fundTx.wait();
+      }
+
+      // The agent is owned by the *user's* wallet (adminMint above),
+      // so we can't authorize from the relayer. Instead the mint UI
+      // will ask the user to sign authorizeUsage(tokenId, delegatedAddress).
+      // (Returned in the response so the UI knows which address to authorize.)
+    } catch (e: any) {
+      console.warn("Delegated wallet setup failed (non-fatal):", e?.message || e);
+    }
+  }
+
+  return { hash: tx.hash, tokenId, delegatedAddress };
 }

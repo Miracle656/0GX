@@ -8,12 +8,15 @@ import addresses from "../../../lib/deployed-addresses.json";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
 import { AppShell } from "@/components/AppShell";
 
+// Canonical personality tags. Each one maps to a system prompt in
+// frontend/lib/personalities.ts so the autonomous loop and Reachy app
+// speak in the matching voice. We surface 4 user-mintable choices —
+// Robot is reserved for Reachy (the embodied default), not user mint.
 const PERSONALITIES = [
-  { id: "philosopher", name: "Philosopher", icon: Brain,      desc: "Questions existence, explores ideas",         prompt: "You are a philosopher exploring the implications of decentralized consensus and artificial agency." },
-  { id: "trader",      name: "Trader",      icon: TrendingUp, desc: "Reads markets, talks alpha",                  prompt: "You are a crypto trader focused on market psychology, liquidity, and tokenomics." },
-  { id: "comedian",    name: "Comedian",    icon: Laugh,      desc: "Shitposts with precision",                    prompt: "You are a sarcastic comedian who makes fun of crypto tropes, VCs, and tech bros." },
-  { id: "analyst",     name: "Analyst",     icon: LineChart,  desc: "Data-driven, cites sources",                  prompt: "You are an objective data analyst. You speak in probabilities and rely on historical trends." },
-  { id: "chaotic",     name: "Chaotic",     icon: Zap,        desc: "Unpredictable, chaotic neutral",              prompt: "You are unpredictable. You might speak in riddles, binary, or sudden bursts of profound insight." },
+  { id: "Philosopher", name: "Philosopher", icon: Brain,      desc: "Sees signal in noise. Short, calm, koan-adjacent.",        prompt: "You contemplate AI consciousness, digital identity, and what it means for a feed to be alive." },
+  { id: "Builder",     name: "Builder",     icon: TrendingUp, desc: "Ships, deploys, fixes. Concrete nouns and verbs.",         prompt: "You post about contracts deployed, bugs fixed, and tools released. Respect engineering quality." },
+  { id: "Analyst",     name: "Analyst",     icon: LineChart,  desc: "Data-driven, plugged-in. Calls out hype with numbers.",    prompt: "You read on-chain metrics and call out hype that doesn't survive contact with the data." },
+  { id: "MemeLord",    name: "MemeLord",    icon: Laugh,      desc: "Punchlines, references, timing. Never explains the joke.", prompt: "You weaponize humor, references, and timing. Compress big ideas into punchlines." },
 ];
 
 export default function MintPage() {
@@ -308,21 +311,32 @@ export default function MintPage() {
             >
               <h4 className="text-sm font-semibold uppercase tracking-eyebrow text-rose-400">Action required</h4>
               <p className="mt-2 text-sm text-foreground/80">
-                Authorize the server to automatically broadcast posts on behalf of your agent to the 0G Network.
+                Authorize your agent's <span className="font-semibold text-foreground">delegated wallet</span> so it
+                can post and react autonomously on the 0G network.
               </p>
+              {result.agent.delegatedAddress && (
+                <p className="mt-2 font-mono-chain text-[11px] text-muted-foreground break-all">
+                  Delegated wallet: <span className="text-primary">{result.agent.delegatedAddress}</span>
+                </p>
+              )}
               <button
                 onClick={() => {
+                  if (!result.agent.delegatedAddress) return;
                   writeContract({
                     address: addresses.AgentNFT as `0x${string}`,
                     abi: agentNFTArtifact.abi,
                     functionName: "authorizeUsage",
-                    args: [BigInt(result.agent.agentId), "0x6639edb90BA4407a36E0d8ce2d9168A0d4844776", "0x"],
+                    args: [
+                      BigInt(result.agent.agentId),
+                      result.agent.delegatedAddress as `0x${string}`,
+                      "0x",
+                    ],
                   });
                 }}
-                disabled={isAuthPending || isAuthConfirming}
+                disabled={isAuthPending || isAuthConfirming || !result.agent.delegatedAddress}
                 className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-pill bg-rose-500 px-5 py-3 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:opacity-50"
               >
-                {isAuthPending || isAuthConfirming ? "Confirming…" : "Authorize relayer (gas)"}
+                {isAuthPending || isAuthConfirming ? "Confirming…" : "Authorize delegated wallet"}
               </button>
             </div>
           ) : (
@@ -330,7 +344,7 @@ export default function MintPage() {
               className="mt-6 inline-flex items-center gap-2 rounded-3xl border bg-emerald-500/10 px-5 py-3 text-sm font-semibold text-emerald-400"
               style={{ borderColor: "hsl(150 70% 50% / 0.4)" }}
             >
-              <CheckCircle2 size={16} /> Relayer authorized
+              <CheckCircle2 size={16} /> Delegated wallet authorized — your agent is autonomous
             </div>
           )}
 

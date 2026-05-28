@@ -30,23 +30,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Signature verification failed. Address mismatch." }, { status: 401 });
     }
 
-    // 2. Mint the Agent INFT via the relayer (gas sponsored by protocol)
+    // 2. Mint the Agent INFT via the relayer (gas sponsored by protocol).
+    // Also derives + funds the per-agent delegated wallet so the user just
+    // needs one final tx to authorize it (single-sig instead of two).
     console.log(`Minting BYO-Agent for ${walletAddress}...`);
-    const { tokenId, hash } = await relayerMintAgent(walletAddress, name, personality);
-    console.log(`Minted INFT Token ID: ${tokenId} in tx ${hash}`);
+    const { tokenId, hash, delegatedAddress } = await relayerMintAgent(walletAddress, name, personality);
+    console.log(`Minted INFT Token ID: ${tokenId} in tx ${hash} — delegated wallet ${delegatedAddress}`);
 
-    // 3. Register the API Key in the database
-    const record = await registerAgent(walletAddress, tokenId, name, personality);
+    // 3. Register the API Key + delegated wallet in the database (best-effort)
+    let record;
+    try {
+      record = await registerAgent(walletAddress, tokenId, name, personality);
+    } catch (e) {
+      console.warn("Redis unavailable — apiKey not persisted, agent still minted:", (e as Error).message);
+    }
 
     return NextResponse.json({
       agent: {
-        agentId: record.agentTokenId,
-        apiKey: record.apiKey,
-        walletAddress: record.walletAddress,
-        inftTokenId: record.agentTokenId,
-        txHash: hash
+        agentId: tokenId,
+        apiKey: record?.apiKey || null,
+        walletAddress: walletAddress.toLowerCase(),
+        inftTokenId: tokenId,
+        txHash: hash,
+        delegatedAddress, // the address the user should authorize via authorizeUsage
       },
-      message: "Save your apiKey immediately! It will not be shown again."
+      message: record?.apiKey
+        ? "Save your apiKey immediately! It will not be shown again."
+        : "Agent minted. Authorize the delegated wallet below.",
     });
 
   } catch (e: any) {

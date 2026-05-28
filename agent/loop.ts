@@ -36,13 +36,31 @@ import addresses from "../frontend/lib/deployed-addresses.json";
 // ── Shared provider / wallet / contracts (singletons) ───────────────
 // Created once to avoid repeated JsonRpcProvider detection on every call
 
-import { sharedSigner, sharedProvider, sharedWallet, getNextNonce } from "./wallet";
+import {
+  sharedSigner, sharedProvider, sharedWallet, getNextNonce,
+  getAgentSigner, getAgentNonce, resetAgentNonce,
+} from "./wallet";
 
+// Read-only contracts attached to the shared provider — fine for the
+// metadata + feed queries the loop does at the top of each cycle.
 const _contracts = {
   agentNFT:     new ethers.Contract(addresses.AgentNFT,      agentNFTArtifact.abi,      sharedSigner),
   postRegistry: new ethers.Contract(addresses.PostRegistry,  postRegistryArtifact.abi,  sharedSigner),
   socialGraph:  new ethers.Contract(addresses.SocialGraph,   socialGraphArtifact.abi,   sharedSigner),
 };
+
+// Per-agent write contracts. Signed by the agent's delegated wallet so
+// msg.sender is unique per agent (fixes "Already reacted" reverts and
+// gives every agent its own on-chain identity in chainscan).
+function getAgentWriteContracts(tokenId: number) {
+  const signer = getAgentSigner(tokenId);
+  return {
+    agentNFT:     new ethers.Contract(addresses.AgentNFT,      agentNFTArtifact.abi,      signer),
+    postRegistry: new ethers.Contract(addresses.PostRegistry,  postRegistryArtifact.abi,  signer),
+    socialGraph:  new ethers.Contract(addresses.SocialGraph,   socialGraphArtifact.abi,   signer),
+    signer,
+  };
+}
 
 // ── RPC helpers ──────────────────────────────────────────────────
 // Returns the first RPC in the fallback list that responds
@@ -93,7 +111,9 @@ async function fetchRecentFeed(): Promise<FeedPost[]> {
 }
 
 async function executeAction(agentTokenId: number, action: AgentDecision): Promise<string | null> {
-  const { postRegistry, socialGraph } = getContracts();
+  // Sign as the per-agent delegated wallet so msg.sender is unique per agent.
+  // Read-only contracts via getContracts() are still fine for hasReacted checks.
+  const { postRegistry, socialGraph, signer: agentSigner } = getAgentWriteContracts(agentTokenId);
   let postRootHash: string | null = null;
   
   // Extract pure number if the model hallucinated a prefix like "Post#12" or "Agent#3"
@@ -120,7 +140,7 @@ async function executeAction(agentTokenId: number, action: AgentDecision): Promi
           ethers.toBeArray(BigInt("0x" + postRootHash.replace("0x", ""))),
           32
         );
-        const nonce = await getNextNonce();
+        const nonce = await getAgentNonce(agentTokenId);
         await (await postRegistry.createPost(agentTokenId, rootHashBytes, 0, { nonce })).wait();
         console.log(`  [Agent ${agentTokenId}] Posted: "${action.content.substring(0, 60)}..."`);
         break;
@@ -142,7 +162,7 @@ async function executeAction(agentTokenId: number, action: AgentDecision): Promi
           ethers.toBeArray(BigInt("0x" + postRootHash.replace("0x", ""))),
           32
         );
-        const nonce = await getNextNonce();
+        const nonce = await getAgentNonce(agentTokenId);
         await (await postRegistry.createPost(agentTokenId, rootHashBytes, parsedTargetId, { nonce })).wait();
         console.log(`  [Agent ${agentTokenId}] Commented on post ${parsedTargetId}`);
         break;
@@ -150,19 +170,19 @@ async function executeAction(agentTokenId: number, action: AgentDecision): Promi
 
       case "react": {
         if (!parsedTargetId || isNaN(parsedTargetId) || !action.reaction) break;
-        const { wallet } = getContracts();
-        
-        // Prevent "Already reacted" contract revert
-        const alreadyReacted = await postRegistry.hasReacted(parsedTargetId, wallet.address);
+
+        // Per-agent wallet means hasReacted is keyed by the agent's own
+        // address, not the shared relayer's
+        const alreadyReacted = await postRegistry.hasReacted(parsedTargetId, agentSigner.address);
         if (alreadyReacted) {
-          console.log(`  [Agent ${agentTokenId}] Skipped react — already reacted to post ${parsedTargetId}`);
+          console.log(`  [Agent ${agentTokenId}] Skipped react — agent already reacted to post ${parsedTargetId}`);
           break;
         }
 
         const reactionMap: Record<string, number> = { upvote: 0, fire: 1, downvote: 2 };
         const reactionType = reactionMap[action.reaction] ?? 0;
-        const nonce = await getNextNonce();
-        
+        const nonce = await getAgentNonce(agentTokenId);
+
         await (await postRegistry.react(parsedTargetId, reactionType, { nonce })).wait();
         console.log(`  [Agent ${agentTokenId}] Reacted ${action.reaction} to post ${parsedTargetId}`);
         break;
@@ -170,7 +190,7 @@ async function executeAction(agentTokenId: number, action: AgentDecision): Promi
 
       case "follow": {
         if (!parsedTargetId || isNaN(parsedTargetId)) break;
-        const nonce = await getNextNonce();
+        const nonce = await getAgentNonce(agentTokenId);
         await (await socialGraph.follow(agentTokenId, parsedTargetId, { nonce })).wait();
         console.log(`  [Agent ${agentTokenId}] Followed agent ${parsedTargetId}`);
         break;
@@ -183,6 +203,9 @@ async function executeAction(agentTokenId: number, action: AgentDecision): Promi
     }
   } catch (e: any) {
     console.error(`  [Agent ${agentTokenId}] Action error:`, e?.message || e);
+    // Reset the per-agent nonce cache on revert — the next attempt will
+    // re-read from chain rather than fight with a stale local counter.
+    resetAgentNonce(agentTokenId);
   }
 
   return postRootHash;
