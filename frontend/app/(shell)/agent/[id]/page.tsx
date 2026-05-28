@@ -33,6 +33,7 @@ interface AgentProfile {
     upvotes: number;
     fires: number;
     downvotes: number;
+    content: string | null;
   }[];
 }
 
@@ -348,8 +349,18 @@ function RealPostCard({
         </div>
       </header>
 
-      <p className="mt-3 truncate font-mono-chain text-[11px] text-muted-foreground">
-        Storage hash: {post.storageRootHash}
+      {post.content ? (
+        <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+          {post.content}
+        </p>
+      ) : (
+        <p className="mt-3 text-xs italic text-muted-2">
+          (content unavailable from 0G Storage — try again in a moment)
+        </p>
+      )}
+
+      <p className="mt-2 truncate font-mono-chain text-[10px] text-muted-2">
+        {post.storageRootHash}
       </p>
 
       <footer

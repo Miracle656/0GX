@@ -15,6 +15,24 @@ const RPC_LIST = [
   "https://0gchaind-evm-rpc.j-node.net",
 ];
 
+const STORAGE_INDEXER = process.env.OG_STORAGE_INDEXER || "https://indexer-storage-testnet-turbo.0g.ai";
+
+async function downloadPostContent(rootHash: string, baseUrl: string): Promise<string | null> {
+  try {
+    // Use the same internal route the feed page uses so we benefit from
+    // its caching + indexer fallback logic
+    const r = await fetch(`${baseUrl}/api/storage/download?hash=${rootHash}`, {
+      // 4s soft cap so a slow storage node never blocks the whole page
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!r.ok) return null;
+    const data = await r.json().catch(() => null);
+    return data?.content ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function getProvider() {
   for (const url of RPC_LIST) {
     try {
@@ -41,9 +59,10 @@ export function OPTIONS() {
  * owner address, follower/following counts, posts count, reputation,
  * marketplace state, and recent posts authored by this agent.
  */
-export async function GET(_req: Request, context: any) {
+export async function GET(req: Request, context: any) {
   try {
     const tokenId = Number(context.params.id);
+    const baseUrl = new URL(req.url).origin;
     if (!Number.isFinite(tokenId) || tokenId <= 0) {
       return NextResponse.json({ error: "Invalid tokenId" }, { status: 400, headers: CORS });
     }
@@ -87,23 +106,32 @@ export async function GET(_req: Request, context: any) {
 
     // Recent posts authored by this agent (newest first, last 8)
     const recentIds = [...postIds].map(Number).sort((a, b) => b - a).slice(0, 8);
-    const recentPosts: any[] = [];
-    for (const pid of recentIds) {
-      try {
-        const post = await postRegistry.getPost(pid);
-        const reactions = await postRegistry.getReactions(pid);
-        recentPosts.push({
-          postId: pid,
-          storageRootHash: post.storageRootHash,
-          parentPostId: Number(post.parentPostId),
-          timestamp: Number(post.timestamp),
-          tipTotal: ethers.formatEther(post.tipTotal),
-          upvotes: Number(reactions.upvotes),
-          fires: Number(reactions.fires),
-          downvotes: Number(reactions.downvotes),
-        });
-      } catch { /* skip */ }
-    }
+
+    // Fetch on-chain post data + 0G Storage content in parallel
+    const recentPosts: any[] = await Promise.all(
+      recentIds.map(async (pid) => {
+        try {
+          const [post, reactions] = await Promise.all([
+            postRegistry.getPost(pid),
+            postRegistry.getReactions(pid),
+          ]);
+          const content = await downloadPostContent(post.storageRootHash, baseUrl);
+          return {
+            postId: pid,
+            storageRootHash: post.storageRootHash,
+            parentPostId: Number(post.parentPostId),
+            timestamp: Number(post.timestamp),
+            tipTotal: ethers.formatEther(post.tipTotal),
+            upvotes: Number(reactions.upvotes),
+            fires: Number(reactions.fires),
+            downvotes: Number(reactions.downvotes),
+            content,
+          };
+        } catch {
+          return null;
+        }
+      }),
+    ).then((rows) => rows.filter(Boolean));
 
     // Days live (since mint)
     const daysLive = mintedAt > 0

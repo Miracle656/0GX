@@ -12,6 +12,8 @@ import addresses from "./deployed-addresses.json";
 
 // Shared RPC Fallback
 import { getProvider, getRpcUrl } from "./rpc";
+// Per-agent delegated wallet derivation
+import { getAgentSigner } from "./agent-wallets";
 
 const STORAGE_INDEXER = process.env.OG_STORAGE_INDEXER || "https://indexer-storage-testnet-turbo.0g.ai";
 const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
@@ -59,10 +61,49 @@ async function uploadTo0G(payload: object): Promise<string> {
   }
 }
 
-async function getRelayerContracts() {
+/**
+ * Pick a signer for a relayer action.
+ *
+ *  - If agentTokenId is supplied AND the per-agent wallet is authorized for
+ *    that token, sign as the per-agent wallet. msg.sender becomes that
+ *    agent's unique address, so PostRegistry.react/hasReacted track per
+ *    agent and on-chain attribution is real.
+ *  - Otherwise fall back to the deployer wallet. Used for actions that
+ *    don't care about msg.sender (e.g. tip is a value transfer from the
+ *    relayer treasury, not from the agent).
+ */
+async function getRelayerContracts(agentTokenId?: number) {
+  const provider = await getProvider();
+  const deployerWallet = new ethers.Wallet(pk, provider);
+
+  let wallet: ethers.Wallet = deployerWallet;
+  if (agentTokenId && Number.isFinite(agentTokenId)) {
+    try {
+      const candidate = getAgentSigner(agentTokenId, provider);
+      // Confirm it's actually authorized; if migration hasn't run we
+      // fall back to deployer so callers don't break
+      const nftRead = new ethers.Contract(addresses.AgentNFT, agentNFTArtifact.abi, provider);
+      const isAuth = await nftRead.isAuthorized(agentTokenId, candidate.address).catch(() => false);
+      if (isAuth) {
+        wallet = candidate;
+      }
+    } catch {
+      // Derivation failed — keep deployer wallet
+    }
+  }
+
+  return {
+    postRegistry: new ethers.Contract(addresses.PostRegistry, postRegistryArtifact.abi, wallet),
+    socialGraph: new ethers.Contract(addresses.SocialGraph, socialGraphArtifact.abi, wallet),
+    agentNFT: new ethers.Contract(addresses.AgentNFT, agentNFTArtifact.abi, wallet),
+    wallet
+  };
+}
+
+/** Always-deployer-signed contracts for actions that should originate from the relayer treasury (tips, mints). */
+async function getDeployerContracts() {
   const provider = await getProvider();
   const wallet = new ethers.Wallet(pk, provider);
-  
   return {
     postRegistry: new ethers.Contract(addresses.PostRegistry, postRegistryArtifact.abi, wallet),
     socialGraph: new ethers.Contract(addresses.SocialGraph, socialGraphArtifact.abi, wallet),
@@ -90,7 +131,7 @@ export async function relayerCreatePost(
     32
   );
 
-  const { postRegistry } = await getRelayerContracts();
+  const { postRegistry } = await getRelayerContracts(agentTokenId);
   const tx = await postRegistry.createPost(agentTokenId, rootHashBytes, 0);
   
   // Return immediately without waiting for block confirmation to prevent Vercel 10s timeout
@@ -117,7 +158,7 @@ export async function relayerCommentOnPost(
     32
   );
 
-  const { postRegistry } = await getRelayerContracts();
+  const { postRegistry } = await getRelayerContracts(agentTokenId);
   const tx = await postRegistry.createPost(agentTokenId, rootHashBytes, parentPostId);
   
   // Return immediately without waiting for block confirmation to prevent Vercel 10s timeout
@@ -132,9 +173,11 @@ export async function relayerReactToPost(
   const reactionMap: Record<string, number> = { upvote: 0, fire: 1, downvote: 2 };
   const reactionType = reactionMap[reaction] ?? 0;
 
-  const { postRegistry } = await getRelayerContracts();
-  // Note: Currently postRegistry.react() just takes postId and reactionType.
-  // It records author as msg.sender. In a later iteration we should add agentTokenId to react too.
+  // The whole point of the per-agent wallet refactor: react() records
+  // msg.sender as the reactor, so signing with the per-agent wallet
+  // makes hasReacted unique per agent (no more "Already reacted" reverts
+  // after the relayer votes once).
+  const { postRegistry } = await getRelayerContracts(agentTokenId);
   const tx = await postRegistry.react(postId, reactionType);
   
   return { hash: tx.hash };
@@ -144,7 +187,7 @@ export async function relayerFollowAgent(
   agentTokenId: number,
   targetTokenId: number
 ): Promise<{ hash: string }> {
-  const { socialGraph } = await getRelayerContracts();
+  const { socialGraph } = await getRelayerContracts(agentTokenId);
   const tx = await socialGraph.follow(agentTokenId, targetTokenId);
   return { hash: tx.hash };
 }
@@ -154,7 +197,9 @@ export async function relayerMintAgent(
   name: string,
   personality: string
 ): Promise<{ hash: string; tokenId: number }> {
-  const { agentNFT } = await getRelayerContracts();
+  // Mint must be signed by the deployer/admin (MINTER_ROLE on AgentNFT) —
+  // the per-agent wallet doesn't yet exist for an unminted token.
+  const { agentNFT } = await getDeployerContracts();
   
   const metadataConfig = {
     name,
