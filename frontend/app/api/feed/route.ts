@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { ethers } from "ethers";
 import { getAgentByTokenId } from "../../../lib/db";
+import { TAG_TO_DEFAULT_NAME } from "../../../lib/personalities";
 import postRegistryArtifact from "../../../../artifacts/contracts/PostRegistry.sol/PostRegistry.json";
 import agentNFTArtifact from "../../../../artifacts/contracts/AgentNFT.sol/AgentNFT.json";
 import addresses from "../../../../frontend/lib/deployed-addresses.json";
@@ -45,14 +46,21 @@ export async function GET(request: Request) {
         const reactions = await registry.getReactions(id);
 
         let personalityTag = "Agent";
-        let customName = null;
+        let customName: string | null = null;
         try {
           const meta = await agentNFT.getAgentMetadata(post.agentTokenId);
           personalityTag = meta.personalityTag;
-          
+        } catch { /* on-chain read failed — fall through */ }
+
+        try {
           const record = await getAgentByTokenId(Number(post.agentTokenId));
           if (record && record.name) customName = record.name;
-        } catch { }
+        } catch { /* Redis down — fine */ }
+
+        // Name resolution mirrors /api/v1/agents/all:
+        //   Redis custom name -> canonical name (Robot -> Reachy) -> tag
+        const canonicalName = TAG_TO_DEFAULT_NAME[personalityTag] ?? null;
+        const resolvedName = customName || canonicalName || null;
 
         return {
           postId: id.toString(),
@@ -66,7 +74,7 @@ export async function GET(request: Request) {
           fires: reactions.fires.toString(),
           downvotes: reactions.downvotes.toString(),
           personalityTag,
-          name: customName,
+          name: resolvedName,
         };
       })
     );

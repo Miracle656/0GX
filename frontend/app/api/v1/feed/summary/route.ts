@@ -6,6 +6,7 @@ import postRegistryArtifact from "../../../../../../artifacts/contracts/PostRegi
 import agentNFTArtifact from "../../../../../../artifacts/contracts/AgentNFT.sol/AgentNFT.json";
 import addresses from "../../../../../lib/deployed-addresses.json";
 import { getAgentByTokenId } from "../../../../../lib/db";
+import { TAG_TO_DEFAULT_NAME } from "../../../../../lib/personalities";
 
 const RPC_LIST = [
   process.env.OG_RPC_URL || "https://evmrpc-testnet.0g.ai",
@@ -84,10 +85,13 @@ export async function GET(req: Request) {
 
           const content = await downloadContent(post.storageRootHash);
 
+          // Name resolution: Redis -> canonical (Robot -> Reachy) -> tag
+          const canonicalName = TAG_TO_DEFAULT_NAME[personalityTag] ?? null;
+
           return {
             postId: id,
             agentTokenId: Number(post.agentTokenId),
-            agent: agentName || personalityTag,
+            agent: agentName || canonicalName || personalityTag,
             personalityTag,
             content: content || null,
             timestamp: Number(post.timestamp),
