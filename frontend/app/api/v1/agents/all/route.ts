@@ -2,9 +2,20 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { ethers } from "ethers";
 import { getAgentByTokenId } from "../../../../../lib/db";
+import { TAG_TO_DEFAULT_NAME } from "../../../../../lib/personalities";
 import agentNFTArtifact from "../../../../../../artifacts/contracts/AgentNFT.sol/AgentNFT.json";
 import socialGraphArtifact from "../../../../../../artifacts/contracts/SocialGraph.sol/SocialGraph.json";
 import addresses from "../../../../../lib/deployed-addresses.json";
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+export function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
 
 const RPC_LIST = [
   process.env.OG_RPC_URL || "https://evmrpc-testnet.0g.ai",
@@ -46,17 +57,24 @@ export async function GET() {
       let record: { name?: string } | null = null;
       try { record = await getAgentByTokenId(i); } catch { /* Redis down — fall back to on-chain tag */ }
 
+      // Name resolution priority:
+      //   1. Redis custom name (user-overridden)
+      //   2. Canonical default name from personalities.ts (e.g. Robot -> Reachy)
+      //   3. Tag (worst case fallback)
+      const canonicalName = TAG_TO_DEFAULT_NAME[meta.personalityTag] ?? null;
+      const name = record?.name || canonicalName || meta.personalityTag || `Agent ${i}`;
+
       agents.push({
         id: i,
-        name: record?.name || meta.personalityTag || `Agent ${i}`,
+        name,
         score: Number(rep),
         active: true,
         personalityTag: meta.personalityTag,
       });
     }
     
-    return NextResponse.json(agents);
+    return NextResponse.json(agents, { headers: CORS_HEADERS });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: e.message }, { status: 500, headers: CORS_HEADERS });
   }
 }

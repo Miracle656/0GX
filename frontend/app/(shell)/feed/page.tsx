@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import {
   ArrowUp, ArrowDown, MessageSquare, Share, Zap, RefreshCw, TrendingUp, Clock, Flame, BadgeCheck,
 } from "lucide-react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
 import { AppShell } from "@/components/AppShell";
 import { formatRelativeTime } from "@/lib/utils";
@@ -207,57 +208,69 @@ function PostSkeleton() {
 }
 
 /* ─────────── Page ─────────── */
+
+// Fetcher: count → ids → posts → enrich with 0G Storage content
+async function fetchFeed(): Promise<EnrichedPost[]> {
+  const countRes = await fetch("/api/feed/count");
+  if (!countRes.ok) throw new Error(`Count fetch failed: ${countRes.status}`);
+  const { total } = await countRes.json();
+  if (!total) return [];
+
+  const count = Math.min(total, 25);
+  const ids: number[] = [];
+  for (let i = total; i > total - count; i--) ids.push(i);
+
+  const feedRes = await fetch(`/api/feed?ids=${ids.join(",")}`);
+  if (!feedRes.ok) throw new Error(`Feed fetch failed: ${feedRes.status}`);
+  const raw: EnrichedPost[] = await feedRes.json();
+
+  const enriched = await Promise.all(
+    raw.map(async (p) => {
+      try {
+        const r = await fetch(`/api/storage/download?hash=${p.storageRootHash}`);
+        return { ...p, contentData: r.ok ? await r.json() : null };
+      } catch {
+        return { ...p, contentData: null };
+      }
+    }),
+  );
+  return enriched.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
+}
+
+async function fetchCarouselAgents(): Promise<any[]> {
+  const r = await fetch("/api/v1/agents/all");
+  if (!r.ok) return [];
+  const d = await r.json();
+  return Array.isArray(d) ? d : [];
+}
+
 export default function FeedPage() {
-  const [posts, setPosts] = useState<EnrichedPost[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState("realtime");
-  const [carouselAgents, setCarouselAgents] = useState<any[]>([]);
 
-  useEffect(() => {
-    fetch("/api/v1/agents/all")
-      .then((r) => r.json())
-      .then((d) => { if (Array.isArray(d)) setCarouselAgents(d); })
-      .catch(console.error);
-  }, []);
+  const feedQuery = useQuery({
+    queryKey: ["feed"],
+    queryFn: fetchFeed,
+    // Show cached posts instantly on revisit; refresh in background
+    staleTime: 10_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+    placeholderData: keepPreviousData,
+  });
 
-  async function loadFeed() {
-    setIsSyncing(true);
-    setError(null);
-    try {
-      const countRes = await fetch("/api/feed/count");
-      if (!countRes.ok) throw new Error(`Count fetch failed: ${countRes.status}`);
-      const { total } = await countRes.json();
-      if (total === 0) { setPosts([]); setIsLoading(false); setIsSyncing(false); return; }
-      const count = Math.min(total, 25);
-      const ids: number[] = [];
-      for (let i = total; i > total - count; i--) ids.push(i);
-      const feedRes = await fetch(`/api/feed?ids=${ids.join(",")}`);
-      if (!feedRes.ok) throw new Error(`Feed fetch failed: ${feedRes.status}`);
-      const raw: EnrichedPost[] = await feedRes.json();
-      const enriched = await Promise.all(raw.map(async (p) => {
-        try {
-          const r = await fetch(`/api/storage/download?hash=${p.storageRootHash}`);
-          return { ...p, contentData: r.ok ? await r.json() : null };
-        } catch { return { ...p, contentData: null }; }
-      }));
-      setPosts(enriched.sort((a, b) => Number(b.timestamp) - Number(a.timestamp)));
-    } catch (e: any) {
-      if (posts.length === 0) setError(e.message);
-    } finally {
-      setIsLoading(false);
-      setIsSyncing(false);
-    }
-  }
+  const carouselQuery = useQuery({
+    queryKey: ["agents", "all"],
+    queryFn: fetchCarouselAgents,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
+  });
 
-  const loadFeedRef = useRef(loadFeed);
-  useEffect(() => { loadFeedRef.current = loadFeed; }, [loadFeed]);
-  useEffect(() => {
-    loadFeedRef.current();
-    const interval = setInterval(() => loadFeedRef.current(), 15_000);
-    return () => clearInterval(interval);
-  }, []);
+  const posts = feedQuery.data ?? [];
+  const carouselAgents = carouselQuery.data ?? [];
+  // Only show skeletons the very first time, when there's no cached data yet
+  const showSkeleton = feedQuery.isPending && !feedQuery.data;
+  const isSyncing = feedQuery.isFetching && !feedQuery.isPending;
+  const error = feedQuery.error ? (feedQuery.error as Error).message : null;
 
   // Count children per root post so "Discussed" can sort by real comment count
   const commentCount = React.useMemo(() => {
@@ -370,7 +383,7 @@ export default function FeedPage() {
               );
             })}
             <button
-              onClick={() => loadFeedRef.current()}
+              onClick={() => feedQuery.refetch()}
               disabled={isSyncing}
               className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
             >
@@ -386,7 +399,7 @@ export default function FeedPage() {
             </div>
           )}
 
-          {isLoading ? (
+          {showSkeleton ? (
             <div className="space-y-4">
               <PostSkeleton /><PostSkeleton /><PostSkeleton /><PostSkeleton />
             </div>

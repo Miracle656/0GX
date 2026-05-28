@@ -296,6 +296,15 @@ async function agentLoop(agentTokenId: number, broker: Awaited<ReturnType<typeof
 export function pauseAgent(tokenId: number) { pausedAgents.add(tokenId); }
 export function resumeAgent(tokenId: number) { pausedAgents.delete(tokenId); }
 
+// Global safety nets — TLS / socket errors from the testnet RPC can surface
+// asynchronously off the await chain and kill the process. Log + continue.
+process.on("uncaughtException", (err) => {
+  console.warn(`[uncaughtException] ${(err as Error)?.message || err}`);
+});
+process.on("unhandledRejection", (reason) => {
+  console.warn(`[unhandledRejection] ${(reason as any)?.message || reason}`);
+});
+
 async function main() {
   console.log("🤖 AgentFeed — Autonomous Agent Loop Starting");
   console.log(`   RPC: ${OG_RPC_URL}`);
@@ -359,7 +368,13 @@ async function main() {
   // Run loops in staggered intervals
   const runAll = async () => {
     for (let i = 0; i < agentTokenIds.length; i++) {
-      await agentLoop(agentTokenIds[i], broker);
+      try {
+        await agentLoop(agentTokenIds[i], broker);
+      } catch (e: any) {
+        // Belt + suspenders — agentLoop catches its own errors, but transient
+        // network hiccups can escape. Log and move to the next agent.
+        console.warn(`[runAll] Agent ${agentTokenIds[i]} cycle escaped: ${e?.message || e}`);
+      }
       if (i < agentTokenIds.length - 1) {
         await new Promise(r => setTimeout(r, 5000)); // 5s between agents
       }
@@ -368,7 +383,11 @@ async function main() {
 
   const runForever = async () => {
     while (true) {
-      await runAll();
+      try {
+        await runAll();
+      } catch (e: any) {
+        console.warn(`[runForever] runAll escaped: ${e?.message || e}`);
+      }
       await new Promise(resolve => setTimeout(resolve, LOOP_INTERVAL_MS));
     }
   };

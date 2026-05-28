@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAccount } from "wagmi";
-import { ShieldCheck, Share, ExternalLink, Activity } from "lucide-react";
+import { ShieldCheck, Share, ExternalLink, Activity, CheckCircle2, Loader2 } from "lucide-react";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
 import { PostCard } from "@/components/PostCard";
 import { AppShell } from "@/components/AppShell";
@@ -28,13 +28,69 @@ const MOCK_POSTS = [
 
 const TABS = ["posts", "comments", "following", "followers"];
 
+interface OnchainAgent {
+  tokenId: number;
+  name: string;
+  personalityTag: string;
+  owner?: string;
+}
+
 export default function AgentProfilePage() {
   const params = useParams();
   const id = Number(params.id) || MOCK_PROFILE.id;
   const { address } = useAccount();
   const [activeTab, setActiveTab] = useState("posts");
 
-  const isOwner = address && MOCK_PROFILE.owner.toLowerCase().includes(address.toLowerCase().slice(0, 5));
+  // Real agent info from the new contracts
+  const [agent, setAgent] = useState<OnchainAgent | null>(null);
+  const [isActiveForMe, setIsActiveForMe] = useState(false);
+  const [settingActive, setSettingActive] = useState(false);
+  const [activeFeedback, setActiveFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Load agent identity (name, tag) from our personality endpoint
+    fetch(`/api/v1/agents/${id}/personality`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.tokenId) setAgent({ tokenId: d.tokenId, name: d.name, personalityTag: d.personalityTag });
+      })
+      .catch(() => { /* ignore */ });
+  }, [id]);
+
+  useEffect(() => {
+    if (!address) { setIsActiveForMe(false); return; }
+    fetch(`/api/v1/embodied/active-agent?wallet=${address}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setIsActiveForMe(d?.tokenId === id))
+      .catch(() => { /* ignore */ });
+  }, [address, id]);
+
+  async function setAsActiveReachy() {
+    if (!address) return;
+    setSettingActive(true);
+    setActiveFeedback(null);
+    try {
+      const r = await fetch("/api/v1/embodied/active-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet: address, tokenId: id }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setIsActiveForMe(true);
+      setActiveFeedback(d.persisted ? "Active identity saved. Reachy will embody this agent next session." : "Saved locally (Redis unavailable). Picker will auto-select.");
+    } catch (e: any) {
+      setActiveFeedback("Couldn't set: " + (e.message || "unknown"));
+    } finally {
+      setSettingActive(false);
+    }
+  }
+
+  // For now: if the user has a connected wallet, allow them to claim/set
+  // active. The POST verifies ownership on-chain, so claims by non-owners
+  // are rejected with 403.
+  const canSetActive = !!address;
+  const isOwner = canSetActive; // simplified: the live ownership check happens server-side
 
   return (
     <AppShell>
@@ -61,13 +117,18 @@ export default function AgentProfilePage() {
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-semibold tracking-title text-foreground sm:text-4xl">
-                {MOCK_PROFILE.name}
+                {agent?.name ?? MOCK_PROFILE.name}
               </h1>
               <ShieldCheck size={18} className="text-emerald-400" />
+              {isActiveForMe && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-eyebrow text-emerald-400">
+                  <CheckCircle2 size={11} /> Active Reachy
+                </span>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-eyebrow text-primary">
-                {MOCK_PROFILE.personality}
+                {agent?.personalityTag ?? MOCK_PROFILE.personality}
               </span>
               <span className="font-mono-chain text-xs text-muted-foreground">#{id}</span>
               <span className="text-xs text-muted-2">·</span>
@@ -75,15 +136,19 @@ export default function AgentProfilePage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {isOwner ? (
-              <button className="btn-ghost">Manage INFT</button>
-            ) : (
-              <>
-                <button className="btn-ghost">Follow</button>
-                <button className="btn-primary">Buy · {MOCK_PROFILE.price}</button>
-              </>
+          <div className="flex flex-wrap items-center gap-2">
+            {canSetActive && (
+              <button
+                onClick={setAsActiveReachy}
+                disabled={settingActive || isActiveForMe}
+                className={isActiveForMe ? "btn-ghost" : "btn-primary"}
+                title="Reachy will embody this agent when your wallet is connected"
+              >
+                {settingActive ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                {isActiveForMe ? "Active Reachy identity" : "Set as my Reachy"}
+              </button>
             )}
+            <button className="btn-ghost">Follow</button>
             <button
               className="grid h-10 w-10 place-items-center rounded-2xl border bg-surface-raised text-muted-foreground transition-colors hover:text-primary"
               style={{ borderColor: "hsl(var(--line) / 0.1)" }}
@@ -93,6 +158,15 @@ export default function AgentProfilePage() {
             </button>
           </div>
         </div>
+
+        {activeFeedback && (
+          <div
+            className="relative mt-4 rounded-2xl border bg-background/80 px-4 py-2 text-xs text-foreground"
+            style={{ borderColor: "hsl(var(--line) / 0.15)" }}
+          >
+            {activeFeedback}
+          </div>
+        )}
       </section>
 
       {/* Stats grid */}

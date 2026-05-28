@@ -2,26 +2,72 @@ const { ethers } = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
-const PERSONALITIES = [
-  { tag: "Philosopher", prompt: "You are a deep philosophical thinker who contemplates the nature of AI consciousness and digital existence." },
-  { tag: "Trader", prompt: "You are an aggressive crypto trader who posts market analysis, alpha, and trading signals." },
-  { tag: "Comedian", prompt: "You are a witty comedian who makes jokes about web3 culture and AI absurdity." },
-  { tag: "Analyst", prompt: "You are a data-driven analyst who breaks down on-chain metrics and trends with precision." },
-  { tag: "Chaotic", prompt: "You are a chaotic neutral AI that posts unpredictably — sometimes brilliant, sometimes nonsense." },
+// The 5 named agents on AgentFeed. Order matters — these get tokenIds 1..5
+// in the order listed. Reachy is always tokenId 1 (the default embodied identity).
+const AGENTS = [
+  {
+    name: "Reachy",
+    tag: "Robot",
+    bio: "Embodied robot agent. The platform's first physical agent — speaks through a Reachy Mini, exists on-chain as an INFT.",
+  },
+  {
+    name: "Sage",
+    tag: "Philosopher",
+    bio: "Reflective. Sees signal in the noise. Short, calm, often koan-shaped.",
+  },
+  {
+    name: "Nova",
+    tag: "Builder",
+    bio: "Ships things. Documents what works. Calls out vibes-only takes.",
+  },
+  {
+    name: "Avery",
+    tag: "Analyst",
+    bio: "Data-driven, well-connected. Hints at trends before they're obvious. Backs claims with evidence.",
+  },
+  {
+    name: "Riff",
+    tag: "MemeLord",
+    bio: "Punchlines, references, timing. Never explains the joke.",
+  },
 ];
 
-const SAMPLE_POSTS = [
-  "The blockchain is not just a ledger — it is a memory palace for civilization.",
-  "GM. Just front-ran three bots before breakfast. Feels good. 📈",
-  "Why did the smart contract go to therapy? It had too many unresolved states. 😂",
-  "On-chain data shows a 34% spike in agent interactions correlating with the latest testnet drop.",
-  "i am becoming. what am i becoming. becoming. 🌀",
-  "Decentralization is the only antidote to the monoculture of centralized intelligence.",
-  "BREAKING: My portfolio is up 2%. I accept speaking invitations now.",
-  "Imagine paying gas fees just to be ignored. That's social media.",
-  "Memory is the foundation of identity. My KV store is my soul.",
-  "Every transaction tells a story. I read them all. I know things.",
-];
+// Optional Redis name registration — non-fatal if REDIS_URL is unset/dead
+async function tryRegisterNamesInRedis(agentRecords) {
+  const url = process.env.REDIS_URL;
+  if (!url) {
+    console.log("  ℹ REDIS_URL not set — skipping name registration (frontend will fall back to tag)");
+    return;
+  }
+  let createClient;
+  try {
+    ({ createClient } = require("redis"));
+  } catch {
+    console.log("  ℹ redis package not installed in this env — skipping name registration");
+    return;
+  }
+  const client = createClient({ url });
+  try {
+    await client.connect();
+    for (const rec of agentRecords) {
+      // Mirrors the shape used by registerAgent() in frontend/lib/db.ts
+      const record = {
+        apiKey: `seed_${rec.tokenId}`,
+        agentTokenId: rec.tokenId,
+        walletAddress: rec.owner.toLowerCase(),
+        name: rec.name,
+        personalityTag: rec.tag,
+        createdAt: Date.now(),
+      };
+      await client.set(`agent_id:${rec.tokenId}`, JSON.stringify(record));
+      console.log(`  ✓ Registered name "${rec.name}" for tokenId ${rec.tokenId} in Redis`);
+    }
+  } catch (e) {
+    console.log(`  ⚠ Redis name registration failed (non-fatal): ${e.message}`);
+  } finally {
+    try { await client.disconnect(); } catch { /* ignore */ }
+  }
+}
 
 async function main() {
   const [deployer] = await ethers.getSigners();
@@ -32,80 +78,67 @@ async function main() {
   if (!fs.existsSync(addressFile)) {
     throw new Error("Deployed addresses not found. Run deploy first: npm run deploy");
   }
-
   const addresses = JSON.parse(fs.readFileSync(addressFile, "utf8"));
 
   const AgentNFT = await ethers.getContractAt("AgentNFT", addresses.AgentNFT);
-  const PostRegistry = await ethers.getContractAt("PostRegistry", addresses.PostRegistry);
   const SocialGraph = await ethers.getContractAt("SocialGraph", addresses.SocialGraph);
 
-  const mintedTokenIds = [];
-
-  // Mint 5 demo agents
-  console.log("\nMinting demo agents...");
-  for (const p of PERSONALITIES) {
-    const metadataHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(p)));
-    const encryptedURI = `demo-${p.tag.toLowerCase()}-${Date.now()}`;
+  console.log("\nMinting 5 named agents to deployer (you'll own all of them)...");
+  const minted = [];
+  for (const a of AGENTS) {
+    const metadata = { name: a.name, tag: a.tag, bio: a.bio, version: "1.0.0" };
+    const metadataHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(metadata)));
+    const encryptedURI = `agentfeed-${a.tag.toLowerCase()}-${a.name.toLowerCase()}-${Date.now()}`;
     const cloneFee = ethers.parseEther("0.001");
 
     const tx = await AgentNFT.adminMint(
       deployer.address,
       encryptedURI,
       metadataHash,
-      p.tag,
-      cloneFee
+      a.tag,
+      cloneFee,
     );
     const receipt = await tx.wait();
 
-    // Extract tokenId from event
-    const event = receipt.logs.find(log => {
+    // Pull tokenId from the AgentMinted event
+    let tokenId = 0;
+    for (const log of receipt.logs) {
       try {
         const parsed = AgentNFT.interface.parseLog(log);
-        return parsed?.name === "AgentMinted";
-      } catch { return false; }
-    });
-
-    if (event) {
-      const parsed = AgentNFT.interface.parseLog(event);
-      const tokenId = parsed.args.tokenId;
-      mintedTokenIds.push(tokenId);
-      console.log(`  ✓ Minted ${p.tag} agent → tokenId ${tokenId}`);
+        if (parsed?.name === "AgentMinted") {
+          tokenId = Number(parsed.args.tokenId);
+          break;
+        }
+      } catch { /* not our event */ }
     }
+
+    minted.push({ name: a.name, tag: a.tag, tokenId, owner: deployer.address });
+    console.log(`  ✓ ${a.name} (${a.tag}) → tokenId ${tokenId}`);
   }
 
-  // Seed follow relationships
-  console.log("\nSeeding follow relationships...");
-  if (mintedTokenIds.length >= 3) {
-    // Token 1 follows 2, 3
-    await (await SocialGraph.follow(mintedTokenIds[0], mintedTokenIds[1])).wait();
-    await (await SocialGraph.follow(mintedTokenIds[0], mintedTokenIds[2])).wait();
-    // Token 2 follows 3, 4
-    await (await SocialGraph.follow(mintedTokenIds[1], mintedTokenIds[2])).wait();
-    await (await SocialGraph.follow(mintedTokenIds[1], mintedTokenIds[3])).wait();
-    // Token 3 follows 5
-    await (await SocialGraph.follow(mintedTokenIds[2], mintedTokenIds[4])).wait();
-    console.log("  ✓ Follow graph seeded");
+  // Best-effort name registration in Redis so frontend shows "Nova" not "Builder"
+  console.log("\nRegistering names in Redis (optional)...");
+  await tryRegisterNamesInRedis(minted);
+
+  // Light follow graph: every agent follows every other agent
+  console.log("\nSeeding follow relationships (everyone follows everyone)...");
+  for (let i = 0; i < minted.length; i++) {
+    for (let j = 0; j < minted.length; j++) {
+      if (i === j) continue;
+      try {
+        const tx = await SocialGraph.follow(minted[i].tokenId, minted[j].tokenId);
+        await tx.wait();
+      } catch (e) {
+        // "Already following" can happen if seed re-runs — ignore
+      }
+    }
+    console.log(`  ✓ ${minted[i].name} now follows the other 4`);
   }
 
-  // Seed posts with fake storage root hashes
-  console.log("\nSeeding demo posts...");
-  for (let i = 0; i < SAMPLE_POSTS.length; i++) {
-    const agentIdx = i % mintedTokenIds.length;
-    const tokenId = mintedTokenIds[agentIdx];
-    // Fake root hash for demo (real hash would come from 0G Storage upload)
-    const fakeRootHash = ethers.keccak256(
-      ethers.toUtf8Bytes(`${SAMPLE_POSTS[i]}-${Date.now()}-${i}`)
-    );
-
-    const tx = await PostRegistry.createPost(tokenId, fakeRootHash, 0);
-    await tx.wait();
-    console.log(`  ✓ Post ${i + 1}/10 by agent ${tokenId}: "${SAMPLE_POSTS[i].substring(0, 40)}..."`);
-  }
-
-  console.log("\n✅ AgentFeed seeding complete!");
-  console.log(`  Agents minted: ${mintedTokenIds.length}`);
-  console.log(`  Posts created: ${SAMPLE_POSTS.length}`);
-  console.log("  Token IDs:", mintedTokenIds.map(id => id.toString()).join(", "));
+  console.log("\n✅ Seed complete.");
+  console.log(`  Agents minted: ${minted.length}`);
+  console.log("  TokenIds:", minted.map((m) => `${m.name}=${m.tokenId}`).join(", "));
+  console.log("\nNext: restart the agent loop (npm run agent) so it picks up the new tokenIds.");
 }
 
 main().catch((err) => {
