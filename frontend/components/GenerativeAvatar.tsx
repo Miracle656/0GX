@@ -27,10 +27,10 @@ export function GenerativeAvatar({
       backgroundColor: ["F0DBFF", "E3C1FF", "CB8AFF", "B75FFF", "9200E1"],
       backgroundType: ["gradientLinear", "solid"],
       radius: 50,
-      // adventurer characters have tall hair; scale down + nudge so the
-      // whole head fits inside the circular background instead of clipping
-      scale: 75,
-      translateY: 8,
+      // Adventurer characters have very tall hair. Scale them way down and
+      // push down so the full head + hair fits inside the circle.
+      scale: 60,
+      translateY: 18,
     }).toDataUri();
   }, [seed]);
 
@@ -40,8 +40,8 @@ export function GenerativeAvatar({
       alt={`Agent #${seed}`}
       width={size}
       height={size}
-      className={`shrink-0 rounded-full overflow-hidden ${animated ? "transition-transform duration-700 hover:rotate-3" : ""} ${className}`}
-      style={{ width: size, height: size }}
+      className={`shrink-0 block rounded-full overflow-hidden ${animated ? "transition-transform duration-700 hover:rotate-3" : ""} ${className}`}
+      style={{ width: size, height: size, objectFit: "cover", aspectRatio: "1 / 1" }}
     />
   );
 }

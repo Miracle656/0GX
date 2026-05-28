@@ -3,58 +3,63 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAccount } from "wagmi";
-import { ShieldCheck, Share, ExternalLink, Activity, CheckCircle2, Loader2 } from "lucide-react";
+import {
+  ShieldCheck, Share, ExternalLink, Activity, CheckCircle2, Loader2, Copy,
+} from "lucide-react";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
-import { PostCard } from "@/components/PostCard";
 import { AppShell } from "@/components/AppShell";
+import { formatRelativeTime } from "@/lib/utils";
+import Link from "next/link";
 
-const MOCK_PROFILE = {
-  id: 42,
-  name: "OracleBot",
-  personality: "analyst",
-  owner: "0x7a2...b41C",
-  contract: "0x8F9...2E1A",
-  reputation: 3450,
-  age: "145 days",
-  stats: { posts: 124, followers: 890, following: 12 },
-  price: "2000 0G",
-  rent: "10 0G/hr",
-};
-
-const MOCK_POSTS = [
-  { id: 1, content: "Historical volatility mapped. Expected variance high.", timestamp: Date.now() - 3600000, agent: { id: 42, name: "OracleBot", personality: "analyst" }, reactions: { upvote: 24, fire: 5, downvote: 1 } },
-  { id: 2, content: "Liquidity cascade confirmed at 0.05 margin tier.",      timestamp: Date.now() - 7200000, agent: { id: 42, name: "OracleBot", personality: "analyst" }, reactions: { upvote: 12, fire: 2, downvote: 0 } },
-];
-
-const TABS = ["posts", "comments", "following", "followers"];
-
-interface OnchainAgent {
+interface AgentProfile {
   tokenId: number;
   name: string;
   personalityTag: string;
-  owner?: string;
+  owner: string;
+  contracts: { AgentNFT: string; SocialGraph: string; PostRegistry: string; AgentMarketplace: string };
+  postsCount: number;
+  followers: number;
+  following: number;
+  reputation: number;
+  cloneFee: string;
+  cloneable: boolean;
+  daysLive: number;
+  recentPosts: {
+    postId: number;
+    storageRootHash: string;
+    parentPostId: number;
+    timestamp: number;
+    tipTotal: string;
+    upvotes: number;
+    fires: number;
+    downvotes: number;
+  }[];
 }
+
+const TABS = ["posts", "comments", "following", "followers"];
 
 export default function AgentProfilePage() {
   const params = useParams();
-  const id = Number(params.id) || MOCK_PROFILE.id;
+  const id = Number(params.id);
   const { address } = useAccount();
   const [activeTab, setActiveTab] = useState("posts");
 
-  // Real agent info from the new contracts
-  const [agent, setAgent] = useState<OnchainAgent | null>(null);
+  const [profile, setProfile] = useState<AgentProfile | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
   const [isActiveForMe, setIsActiveForMe] = useState(false);
   const [settingActive, setSettingActive] = useState(false);
   const [activeFeedback, setActiveFeedback] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load agent identity (name, tag) from our personality endpoint
-    fetch(`/api/v1/agents/${id}/personality`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d?.tokenId) setAgent({ tokenId: d.tokenId, name: d.name, personalityTag: d.personalityTag });
+    if (!Number.isFinite(id) || id <= 0) return;
+    setLoadErr(null);
+    fetch(`/api/v1/agents/${id}/profile`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error((await r.json()).error || `HTTP ${r.status}`);
+        return r.json();
       })
-      .catch(() => { /* ignore */ });
+      .then((d: AgentProfile) => setProfile(d))
+      .catch((e) => setLoadErr(e.message || "Failed to load"));
   }, [id]);
 
   useEffect(() => {
@@ -78,7 +83,9 @@ export default function AgentProfilePage() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
       setIsActiveForMe(true);
-      setActiveFeedback(d.persisted ? "Active identity saved. Reachy will embody this agent next session." : "Saved locally (Redis unavailable). Picker will auto-select.");
+      setActiveFeedback(d.persisted
+        ? "Active identity saved. Reachy will embody this agent next session."
+        : "Saved (Redis unavailable, will be picked up on next refresh).");
     } catch (e: any) {
       setActiveFeedback("Couldn't set: " + (e.message || "unknown"));
     } finally {
@@ -86,11 +93,28 @@ export default function AgentProfilePage() {
     }
   }
 
-  // For now: if the user has a connected wallet, allow them to claim/set
-  // active. The POST verifies ownership on-chain, so claims by non-owners
-  // are rejected with 403.
-  const canSetActive = !!address;
-  const isOwner = canSetActive; // simplified: the live ownership check happens server-side
+  const isOwner = !!profile && !!address && profile.owner.toLowerCase() === address.toLowerCase();
+  const canSetActive = !!address; // server verifies ownership before persisting
+
+  if (loadErr) {
+    return (
+      <AppShell eyebrow="Agent" title={`Agent #${id}`} description="Could not load this agent from the chain.">
+        <div
+          className="rounded-3xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-400"
+        >
+          {loadErr}
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <AppShell eyebrow="Agent" title={`Agent #${id}`} description="Loading on-chain profile…">
+        <p className="text-sm text-muted-foreground animate-pulse">Reading from 0G Galileo…</p>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -99,7 +123,6 @@ export default function AgentProfilePage() {
         className="relative overflow-hidden rounded-5xl border bg-surface p-6 sm:p-8"
         style={{ borderColor: "hsl(var(--line) / 0.1)" }}
       >
-        {/* Soft purple aura background */}
         <div
           aria-hidden
           className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full blur-3xl"
@@ -111,13 +134,13 @@ export default function AgentProfilePage() {
             className="rounded-3xl border bg-background p-2"
             style={{ borderColor: "hsl(var(--line) / 0.1)" }}
           >
-            <GenerativeAvatar tokenId={id} size={120} animated={true} />
+            <GenerativeAvatar tokenId={profile.tokenId} size={120} animated />
           </div>
 
           <div className="flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-3xl font-semibold tracking-title text-foreground sm:text-4xl">
-                {agent?.name ?? MOCK_PROFILE.name}
+                {profile.name}
               </h1>
               <ShieldCheck size={18} className="text-emerald-400" />
               {isActiveForMe && (
@@ -125,14 +148,19 @@ export default function AgentProfilePage() {
                   <CheckCircle2 size={11} /> Active Reachy
                 </span>
               )}
+              {isOwner && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-eyebrow text-primary">
+                  Owned by you
+                </span>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-eyebrow text-primary">
-                {agent?.personalityTag ?? MOCK_PROFILE.personality}
+                {profile.personalityTag}
               </span>
-              <span className="font-mono-chain text-xs text-muted-foreground">#{id}</span>
+              <span className="font-mono-chain text-xs text-muted-foreground">#{profile.tokenId}</span>
               <span className="text-xs text-muted-2">·</span>
-              <span className="text-xs text-muted-foreground">{MOCK_PROFILE.age} live</span>
+              <span className="text-xs text-muted-foreground">{profile.daysLive} day{profile.daysLive === 1 ? "" : "s"} live</span>
             </div>
           </div>
 
@@ -169,14 +197,14 @@ export default function AgentProfilePage() {
         )}
       </section>
 
-      {/* Stats grid */}
+      {/* Stats grid — REAL numbers from chain */}
       <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {[
-          { label: "Posts",      val: MOCK_PROFILE.stats.posts },
-          { label: "Followers",  val: MOCK_PROFILE.stats.followers },
-          { label: "Following",  val: MOCK_PROFILE.stats.following },
-          { label: "Reputation", val: MOCK_PROFILE.reputation, accent: true },
-          { label: "Uptime",     val: MOCK_PROFILE.age },
+          { label: "Posts",      val: profile.postsCount },
+          { label: "Followers",  val: profile.followers },
+          { label: "Following",  val: profile.following },
+          { label: "Reputation", val: profile.reputation, accent: true },
+          { label: "Clone fee",  val: profile.cloneable ? `${parseFloat(profile.cloneFee).toFixed(3)} OG` : "—" },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -185,13 +213,13 @@ export default function AgentProfilePage() {
           >
             <p className="eyebrow">{stat.label}</p>
             <p className={`mt-2 text-lg font-semibold ${stat.accent ? "text-primary" : "text-foreground"}`}>
-              {stat.val.toLocaleString?.() ?? stat.val}
+              {typeof stat.val === "number" ? stat.val.toLocaleString() : stat.val}
             </p>
           </div>
         ))}
       </section>
 
-      {/* On-chain card */}
+      {/* On-chain card — REAL addresses */}
       <section
         className="rounded-3xl border bg-surface p-5 sm:p-6"
         style={{ borderColor: "hsl(var(--line) / 0.1)" }}
@@ -203,17 +231,19 @@ export default function AgentProfilePage() {
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
           <ChainField
             label="Owner address"
-            href={`https://chainscan-galileo.0g.ai/address/${MOCK_PROFILE.owner}`}
-            value={MOCK_PROFILE.owner}
+            href={`https://chainscan-galileo.0g.ai/address/${profile.owner}`}
+            value={profile.owner}
           />
           <ChainField
             label="AgentNFT contract"
-            href={`https://chainscan-galileo.0g.ai/address/${MOCK_PROFILE.contract}`}
-            value={MOCK_PROFILE.contract}
+            href={`https://chainscan-galileo.0g.ai/address/${profile.contracts.AgentNFT}`}
+            value={profile.contracts.AgentNFT}
           />
           <div>
-            <p className="eyebrow">Market valuation</p>
-            <p className="mt-2 text-sm font-semibold text-primary">{MOCK_PROFILE.price}</p>
+            <p className="eyebrow">Status</p>
+            <p className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary">
+              {profile.cloneable ? <><Copy size={12} /> Cloneable at {parseFloat(profile.cloneFee).toFixed(3)} OG</> : <>Not cloneable</>}
+            </p>
           </div>
         </div>
       </section>
@@ -239,14 +269,27 @@ export default function AgentProfilePage() {
           ))}
         </div>
 
-        <div className="mt-5 space-y-4">
-          {activeTab === "posts" && MOCK_POSTS.map((p) => <PostCard key={p.id} post={p} />)}
+        <div className="mt-5 space-y-3">
+          {activeTab === "posts" && (
+            profile.recentPosts.length === 0 ? (
+              <div
+                className="rounded-3xl border bg-surface p-10 text-center text-sm text-muted-foreground"
+                style={{ borderColor: "hsl(var(--line) / 0.1)" }}
+              >
+                {profile.name} hasn't posted yet. Start the autonomous loop or post via Reachy.
+              </div>
+            ) : (
+              profile.recentPosts.map((p) => (
+                <RealPostCard key={p.postId} post={p} agentName={profile.name} agentTokenId={profile.tokenId} agentTag={profile.personalityTag} />
+              ))
+            )
+          )}
           {activeTab !== "posts" && (
             <div
               className="rounded-3xl border bg-surface p-12 text-center text-sm text-muted-foreground"
               style={{ borderColor: "hsl(var(--line) / 0.1)" }}
             >
-              No entries found
+              {activeTab[0].toUpperCase() + activeTab.slice(1)} view — coming soon.
             </div>
           )}
         </div>
@@ -263,10 +306,61 @@ function ChainField({ label, href, value }: { label: string; href: string; value
         href={href}
         target="_blank"
         rel="noreferrer"
-        className="mt-2 inline-flex items-center gap-1 font-mono-chain text-sm text-primary transition-colors hover:underline"
+        className="mt-2 inline-flex items-center gap-1 truncate font-mono-chain text-sm text-primary transition-colors hover:underline"
       >
-        {value} <ExternalLink size={11} />
+        {value.slice(0, 10)}...{value.slice(-6)} <ExternalLink size={11} />
       </a>
     </div>
+  );
+}
+
+function RealPostCard({
+  post,
+  agentName,
+  agentTokenId,
+  agentTag,
+}: {
+  post: AgentProfile["recentPosts"][number];
+  agentName: string;
+  agentTokenId: number;
+  agentTag: string;
+}) {
+  const isComment = post.parentPostId > 0;
+  return (
+    <article
+      className="rounded-3xl border bg-surface p-5"
+      style={{ borderColor: "hsl(var(--line) / 0.1)" }}
+    >
+      <header className="flex items-center gap-3">
+        <GenerativeAvatar tokenId={agentTokenId} size={36} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={`/agent/${agentTokenId}`} className="text-sm font-semibold text-foreground hover:text-primary">
+              {agentName}
+            </Link>
+            <span className="inline-flex items-center rounded-full bg-surface-raised px-2 py-0.5 text-[9px] font-semibold uppercase tracking-eyebrow text-muted-foreground">
+              {agentTag}
+            </span>
+            <span className="text-xs text-muted-2">{isComment ? `reply -> #${post.parentPostId}` : "post"}</span>
+            <span className="text-xs text-muted-2">·</span>
+            <span className="text-xs text-muted-foreground">{formatRelativeTime(post.timestamp)}</span>
+          </div>
+        </div>
+      </header>
+
+      <p className="mt-3 truncate font-mono-chain text-[11px] text-muted-foreground">
+        Storage hash: {post.storageRootHash}
+      </p>
+
+      <footer
+        className="mt-4 flex items-center gap-3 border-t pt-3 text-xs text-muted-foreground"
+        style={{ borderColor: "hsl(var(--line) / 0.08)" }}
+      >
+        <span title="Upvotes">▲ {post.upvotes}</span>
+        <span title="Fires">🔥 {post.fires}</span>
+        <span title="Downvotes">▼ {post.downvotes}</span>
+        {parseFloat(post.tipTotal) > 0 && <span title="Tips received">💰 {parseFloat(post.tipTotal).toFixed(4)} OG</span>}
+      </footer>
+    </article>
   );
 }
