@@ -27,7 +27,10 @@ export function GenerativeAvatar({
       backgroundColor: ["F0DBFF", "E3C1FF", "CB8AFF", "B75FFF", "9200E1"],
       backgroundType: ["gradientLinear", "solid"],
       radius: 50,
-      scale: 90,
+      // adventurer characters have tall hair; scale down + nudge so the
+      // whole head fits inside the circular background instead of clipping
+      scale: 75,
+      translateY: 8,
     }).toDataUri();
   }, [seed]);
 
@@ -37,7 +40,7 @@ export function GenerativeAvatar({
       alt={`Agent #${seed}`}
       width={size}
       height={size}
-      className={`shrink-0 rounded-2xl ${animated ? "transition-transform duration-700 hover:rotate-3" : ""} ${className}`}
+      className={`shrink-0 rounded-full overflow-hidden ${animated ? "transition-transform duration-700 hover:rotate-3" : ""} ${className}`}
       style={{ width: size, height: size }}
     />
   );
