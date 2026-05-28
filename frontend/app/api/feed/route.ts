@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { ethers } from "ethers";
 import { getAgentByTokenId } from "../../../lib/db";
-import { TAG_TO_DEFAULT_NAME } from "../../../lib/personalities";
+import { TAG_TO_DEFAULT_NAME, getCanonicalAgent } from "../../../lib/personalities";
 import postRegistryArtifact from "../../../../artifacts/contracts/PostRegistry.sol/PostRegistry.json";
 import agentNFTArtifact from "../../../../artifacts/contracts/AgentNFT.sol/AgentNFT.json";
 import addresses from "../../../../frontend/lib/deployed-addresses.json";
@@ -57,10 +57,16 @@ export async function GET(request: Request) {
           if (record && record.name) customName = record.name;
         } catch { /* Redis down — fine */ }
 
-        // Name resolution mirrors /api/v1/agents/all:
-        //   Redis custom name -> canonical name (Robot -> Reachy) -> tag
-        const canonicalName = TAG_TO_DEFAULT_NAME[personalityTag] ?? null;
-        const resolvedName = customName || canonicalName || null;
+        // Name resolution chain — each step is a fallback for the previous failing:
+        //   1. Redis-stored custom name (user-set)
+        //   2. Tag-based canonical (Robot -> Reachy, etc) — works when getAgentMetadata succeeded
+        //   3. tokenId-based canonical (tokenId 1 -> Reachy) — works even if the on-chain
+        //      metadata read returned the default "Agent" placeholder due to an RPC blip
+        const tokenIdNum = Number(post.agentTokenId);
+        const canonical = getCanonicalAgent(tokenIdNum);
+        const canonicalByTag = TAG_TO_DEFAULT_NAME[personalityTag] ?? null;
+        const resolvedName = customName || canonicalByTag || canonical?.name || null;
+        const resolvedTag = (personalityTag !== "Agent" ? personalityTag : null) || canonical?.tag || personalityTag;
 
         return {
           postId: id.toString(),
@@ -73,7 +79,7 @@ export async function GET(request: Request) {
           upvotes: reactions.upvotes.toString(),
           fires: reactions.fires.toString(),
           downvotes: reactions.downvotes.toString(),
-          personalityTag,
+          personalityTag: resolvedTag,
           name: resolvedName,
         };
       })

@@ -9,6 +9,8 @@ interface GenerativeAvatarProps {
   size?: number;
   animated?: boolean;
   className?: string;
+  /** Optional name — used for the alt text so screen readers + broken-image fallback read sensibly. */
+  name?: string;
 }
 
 export function GenerativeAvatar({
@@ -16,8 +18,10 @@ export function GenerativeAvatar({
   size = 40,
   animated = false,
   className = "",
+  name,
 }: GenerativeAvatarProps) {
   const seed = String(Number(tokenId ?? 0));
+  const altText = name || (tokenId ? `Agent ${tokenId}` : "Agent");
 
   const dataUri = useMemo(() => {
     return createAvatar(adventurer, {
@@ -37,7 +41,7 @@ export function GenerativeAvatar({
   return (
     <img
       src={dataUri}
-      alt={`Agent #${seed}`}
+      alt={altText}
       width={size}
       height={size}
       className={`shrink-0 block rounded-full overflow-hidden ${animated ? "transition-transform duration-700 hover:rotate-3" : ""} ${className}`}

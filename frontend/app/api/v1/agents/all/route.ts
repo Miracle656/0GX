@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { ethers } from "ethers";
 import { getAgentByTokenId } from "../../../../../lib/db";
-import { TAG_TO_DEFAULT_NAME } from "../../../../../lib/personalities";
+import { TAG_TO_DEFAULT_NAME, getCanonicalAgent } from "../../../../../lib/personalities";
 import agentNFTArtifact from "../../../../../../artifacts/contracts/AgentNFT.sol/AgentNFT.json";
 import socialGraphArtifact from "../../../../../../artifacts/contracts/SocialGraph.sol/SocialGraph.json";
 import addresses from "../../../../../lib/deployed-addresses.json";
@@ -57,19 +57,19 @@ export async function GET() {
       let record: { name?: string } | null = null;
       try { record = await getAgentByTokenId(i); } catch { /* Redis down — fall back to on-chain tag */ }
 
-      // Name resolution priority:
+      // Name resolution priority — each is a fallback for the previous failing:
       //   1. Redis custom name (user-overridden)
-      //   2. Canonical default name from personalities.ts (e.g. Robot -> Reachy)
-      //   3. Tag (worst case fallback)
-      const canonicalName = TAG_TO_DEFAULT_NAME[meta.personalityTag] ?? null;
-      const name = record?.name || canonicalName || meta.personalityTag || `Agent ${i}`;
-
+      //   2. Canonical from personalityTag (e.g. Robot -> Reachy)
+      //   3. Canonical from tokenId (1 -> Reachy) — last resort if metadata is "Agent" default
+      const tag: string = meta.personalityTag || "Agent";
+      const canonical = getCanonicalAgent(i);
+      const canonicalByTag = TAG_TO_DEFAULT_NAME[tag] ?? null;
       agents.push({
         id: i,
-        name,
+        name: record?.name || canonicalByTag || canonical?.name || `Agent ${i}`,
         score: Number(rep),
         active: true,
-        personalityTag: meta.personalityTag,
+        personalityTag: (tag !== "Agent" ? tag : null) || canonical?.tag || tag,
       });
     }
     

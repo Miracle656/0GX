@@ -125,7 +125,11 @@ function PostRow({
           >
             <BadgeCheck size={11} className="text-primary" /> {name}
           </Link>
-          <span className="text-xs text-muted-2">m/general</span>
+          {post.parentPostId && post.parentPostId !== "0" ? (
+            <span className="text-xs text-primary/80">reply → #{post.parentPostId}</span>
+          ) : (
+            <span className="text-xs text-muted-2">m/general</span>
+          )}
           <span className="text-xs text-muted-2">·</span>
           <span className="text-xs text-muted-2">{timeLabel}</span>
           <div className="ml-auto inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-eyebrow text-emerald-400">
@@ -413,46 +417,13 @@ export default function FeedPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {(() => {
-                // Walk posts in display order. Roots get rendered with their
-                // children grouped underneath. Comments whose parent is NOT in
-                // the fetched window become "orphan" comments — still rendered
-                // (with a "reply to #N" badge), so the feed never goes blank
-                // just because the latest 25 entries are all replies.
-                const rendered = new Set<string>();
-                const fetchedIds = new Set(displayedPosts.map((p) => p.postId));
-                const out: React.ReactNode[] = [];
-
-                for (const p of displayedPosts) {
-                  if (rendered.has(p.postId)) continue;
-                  const isRoot = !p.parentPostId || p.parentPostId === "0";
-
-                  if (isRoot) {
-                    const children = displayedPosts.filter((c) => c.parentPostId === p.postId);
-                    out.push(
-                      <div key={p.postId} className="space-y-3">
-                        <PostRow post={p} commentCount={commentCount.get(p.postId) ?? 0} />
-                        {children.map((c) => {
-                          rendered.add(c.postId);
-                          return <PostRow key={c.postId} post={c} isChild />;
-                        })}
-                      </div>,
-                    );
-                    rendered.add(p.postId);
-                  } else if (!fetchedIds.has(p.parentPostId!)) {
-                    // Orphan comment: parent is older than the fetched window
-                    out.push(
-                      <div key={p.postId}>
-                        <PostRow post={p} />
-                      </div>,
-                    );
-                    rendered.add(p.postId);
-                  }
-                  // Comments whose parent IS in the window will be picked up
-                  // when their parent is rendered above.
-                }
-                return out;
-              })()}
+              {/* Flat render: every post is its own row. Replies show a
+                  "reply → #N" badge in their meta line via PostRow. This
+                  avoids the empty-feed bug when the latest fetched window
+                  is all comments. */}
+              {displayedPosts.map((p) => (
+                <PostRow key={p.postId} post={p} commentCount={commentCount.get(p.postId) ?? 0} />
+              ))}
               <div className="py-6 text-center text-[10px] uppercase tracking-eyebrow text-muted-2">
                 — end of stream —
               </div>

@@ -75,6 +75,19 @@ export const TAG_TO_DEFAULT_NAME: Record<string, string> = Object.fromEntries(
 );
 
 /**
+ * tokenId → canonical name/tag. Last-resort fallback for the feed APIs
+ * when an on-chain metadata read transiently fails — a known seeded agent
+ * should never render as "Agent" just because the RPC blipped.
+ * Indexed from 1 to match the on-chain tokenIds.
+ */
+export function getCanonicalAgent(tokenId: number): { name: string; tag: string } | null {
+  if (!Number.isFinite(tokenId) || tokenId < 1) return null;
+  const def = AGENT_DEFINITIONS[tokenId - 1];
+  if (!def) return null;
+  return { name: def.name, tag: def.tag };
+}
+
+/**
  * Build a Reachy-friendly system prompt for an agent.
  * Uses the agent's NAME, not its tag, so the agent feels like itself.
  */
