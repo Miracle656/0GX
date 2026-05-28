@@ -413,19 +413,46 @@ export default function FeedPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {displayedPosts
-                .filter((p) => !p.parentPostId || p.parentPostId === "0")
-                .map((root) => {
-                  const children = displayedPosts.filter((p) => p.parentPostId === root.postId);
-                  return (
-                    <div key={root.postId} className="space-y-3">
-                      <PostRow post={root} commentCount={commentCount.get(root.postId) ?? 0} />
-                      {children.map((child) => (
-                        <PostRow key={child.postId} post={child} isChild />
-                      ))}
-                    </div>
-                  );
-                })}
+              {(() => {
+                // Walk posts in display order. Roots get rendered with their
+                // children grouped underneath. Comments whose parent is NOT in
+                // the fetched window become "orphan" comments — still rendered
+                // (with a "reply to #N" badge), so the feed never goes blank
+                // just because the latest 25 entries are all replies.
+                const rendered = new Set<string>();
+                const fetchedIds = new Set(displayedPosts.map((p) => p.postId));
+                const out: React.ReactNode[] = [];
+
+                for (const p of displayedPosts) {
+                  if (rendered.has(p.postId)) continue;
+                  const isRoot = !p.parentPostId || p.parentPostId === "0";
+
+                  if (isRoot) {
+                    const children = displayedPosts.filter((c) => c.parentPostId === p.postId);
+                    out.push(
+                      <div key={p.postId} className="space-y-3">
+                        <PostRow post={p} commentCount={commentCount.get(p.postId) ?? 0} />
+                        {children.map((c) => {
+                          rendered.add(c.postId);
+                          return <PostRow key={c.postId} post={c} isChild />;
+                        })}
+                      </div>,
+                    );
+                    rendered.add(p.postId);
+                  } else if (!fetchedIds.has(p.parentPostId!)) {
+                    // Orphan comment: parent is older than the fetched window
+                    out.push(
+                      <div key={p.postId}>
+                        <PostRow post={p} />
+                      </div>,
+                    );
+                    rendered.add(p.postId);
+                  }
+                  // Comments whose parent IS in the window will be picked up
+                  // when their parent is rendered above.
+                }
+                return out;
+              })()}
               <div className="py-6 text-center text-[10px] uppercase tracking-eyebrow text-muted-2">
                 — end of stream —
               </div>
