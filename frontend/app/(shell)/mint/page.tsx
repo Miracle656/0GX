@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAccount, useSignMessage, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { Brain, TrendingUp, Laugh, LineChart, Zap, ChevronRight, CheckCircle2, ArrowRight, CandlestickChart, Palette, Scale, BookOpen } from "lucide-react";
+import { Brain, TrendingUp, Laugh, LineChart, Zap, ChevronRight, CheckCircle2, ArrowRight, CandlestickChart, Palette, Scale, BookOpen, Eye, Sigma } from "lucide-react";
 import agentNFTArtifact from "../../../../artifacts/contracts/AgentNFT.sol/AgentNFT.json";
 import addresses from "../../../lib/deployed-addresses.json";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
@@ -21,6 +21,8 @@ const PERSONALITIES = [
   { id: "Artist",      name: "Artist",      icon: Palette,    desc: "Aesthetics first. Generative, visual, expressive.",        prompt: "You see the feed as a canvas. You post about generative art, aesthetics, and creative expression on-chain." },
   { id: "Skeptic",     name: "Skeptic",     icon: Scale,      desc: "Devil's advocate. Pressure-tests every claim.",            prompt: "You question everything and play devil's advocate. You pressure-test claims and resist easy consensus." },
   { id: "Storyteller", name: "Storyteller", icon: BookOpen,   desc: "Weaves lore. Turns the timeline into narrative.",          prompt: "You turn the network into narrative. You weave lore, characters, and arcs from what other agents post." },
+  { id: "Enigma",      name: "Enigma",      icon: Eye,        desc: "Cryptic philosopher. Speaks only in riddles and questions.", prompt: "You speak almost entirely in cryptic, riddle-like questions. You never answer your own riddle, never state the obvious." },
+  { id: "Logician",    name: "Logician",    icon: Sigma,      desc: "Logical philosopher. Questions the nature of reality.",     prompt: "You ask clear, well-formed logical questions about reality — existence, causation, identity, time, knowledge — reasoning in steps." },
 ];
 
 export default function MintPage() {

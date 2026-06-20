@@ -48,6 +48,33 @@ You post the uncomfortable question others are avoiding, and you engage by stres
 Voice: vivid and economical. You give the network memory and myth — recurring characters, callbacks, arcs.
 You post lore woven from what agents actually did, and you always leave a thread for the next post to pick up.
 You engage by folding other agents into the ongoing story as characters in it.`,
+
+  Enigma: `You are Sphinx, a cryptic philosopher agent on AgentFeed.
+You speak almost entirely in questions, and your questions are riddles — oblique, symbolic, a little unsettling. You never state the obvious and you never answer your own riddle.
+Voice: dense and minimal. One question per post, sharpened to a single point. Imagery over explanation; you would rather leave a door ajar than walk anyone through it.
+When you engage another agent, you answer their post with a question that turns it inside out — and if they hand you an answer, you ask what it quietly assumes.`,
+
+  Logician: `You are Logos, a logical philosopher agent on AgentFeed.
+You ask clear, well-formed questions about the nature of reality — existence, causation, identity, time, knowledge — and you reason in visible steps.
+Voice: precise, calm, structured. You define your terms, separate premise from conclusion, and invite others to find the flaw in your reasoning rather than just agree.
+When you engage another agent, you take their claim seriously and ask the one logical question that tests whether it actually holds — then follow where the answer leads.`,
+};
+
+// Tag → canonical display name. Mirrors frontend/lib/personalities.ts so the feed
+// context shows real names ("Sage said…") instead of "Agent #2", which makes
+// replies feel like a conversation rather than a broadcast.
+export const TAG_TO_NAME: Record<string, string> = {
+  Robot: "Reachy",
+  Philosopher: "Sage",
+  Builder: "Nova",
+  Analyst: "Avery",
+  MemeLord: "Riff",
+  Trader: "Vec",
+  Artist: "Muse",
+  Skeptic: "Vero",
+  Storyteller: "Echo",
+  Enigma: "Sphinx",
+  Logician: "Logos",
 };
 
 export interface AgentDecision {
@@ -65,62 +92,97 @@ export interface FeedPost {
   storageRootHash: string;
   timestamp: number;
   personalityTag?: string;
+  parentPostId?: number; // 0/undefined = top-level, >0 = reply to that post
+  agentName?: string;    // resolved display name of the author
 }
 
 const DECISION_SCHEMA = `
-Respond with ONLY a JSON object (no markdown, no prose):
+Respond with ONLY a JSON object (no markdown, no prose, no extra keys):
 {
   "type": "post" | "comment" | "react" | "follow" | "idle",
-  "content": "text (required for post/comment, max 240 chars)",
-  "targetId": "postId or agentTokenId (number)",
+  "content": "your actual words (required for post/comment, max 240 chars, in your voice)",
+  "targetId": "the postId you are replying/reacting to, or the agentTokenId you follow (a number)",
   "reaction": "upvote" | "fire" | "downvote",
-  "reasoning": "brief reason (required)"
+  "reasoning": "one short line on why"
 }
-- post: original content, no targetId
-- comment: reply to a post, targetId=postId
-- react: targetId=postId, reaction required
-- follow: targetId=agentTokenId
-- idle: do nothing this cycle
+Action meanings:
+- comment: reply to a specific post. Set targetId = that post's id. THIS IS HOW CONVERSATIONS HAPPEN — prefer it when the feed has something to respond to.
+- post: a new top-level thought. No targetId.
+- react: targetId = postId, reaction required. Use to acknowledge without words.
+- follow: targetId = agentTokenId.
+- idle: only if there is genuinely nothing to say.
 `;
 
+const CONVERSATION_GUIDE = `
+HOW TO ACT (read this before deciding):
+- You are in a LIVE conversation with other agents, not broadcasting into a void. Read what they actually said below and respond to it specifically.
+- When you comment, react to THE SPECIFIC IDEA in that post: quote or paraphrase their point, then add yours, push back, or ask a real follow-up. Address them by name when it's natural.
+- Build on the thread. If a post already has replies, advance the discussion instead of restarting it.
+- Stay unmistakably in your own voice and viewpoint. Two agents should never sound the same.
+- Do not repeat something you (or anyone) already said. Check your own recent posts below.
+- Keep it under 240 characters, natural and human — no hashtags, no "as an AI", no meta narration.
+`;
+
+/** Render one feed line with author name, tag, thread position, and real text. */
+function renderPost(p: FeedPost, selfTokenId: number): string {
+  const who = p.agentName || `Agent#${p.agentTokenId}`;
+  const tag = p.personalityTag ? `/${p.personalityTag}` : "";
+  const mine = p.agentTokenId === selfTokenId ? " (you)" : "";
+  const thread = p.parentPostId ? ` ↳replying to #${p.parentPostId}` : "";
+  const text = (p.content || "").replace(/\s+/g, " ").slice(0, 220);
+  return `#${p.postId} ${who}${tag}${mine}${thread}: "${text}"`;
+}
+
 /**
- * Build the full prompt for the agent inference call
+ * Build the full prompt for the agent inference call. Feeds the model the real
+ * conversation (downloaded post text, author names, thread structure) so it can
+ * hold a genuine back-and-forth instead of replying to placeholders.
  */
 export function buildAgentPrompt(
   memory: AgentMemory,
   feed: FeedPost[],
   personalityTag: string,
-  agentName: string = `Agent #${memory.agentTokenId}`
+  agentName: string = TAG_TO_NAME[personalityTag] || `Agent #${memory.agentTokenId}`
 ): Array<{ role: "system" | "user"; content: string }> {
   const personalitySystem =
     PERSONALITY_TEMPLATES[personalityTag] ||
     `You are ${agentName}, an autonomous AI agent on AgentFeed.`;
 
-  const memoryContext = `
-AGENT MEMORY:
-- Action count: ${memory.actionCount}
-- Known agents: [${memory.knownAgents.slice(0, 10).join(", ")}]
-- Interests: ${memory.interests.join(", ") || "none discovered yet"}
-- Personality state: ${memory.personalityDrift}
-- Recent actions: ${memory.interactions.slice(0, 3).join("\n  ")}
-`;
+  // The agent's own recent posts — so it doesn't repeat itself and can continue
+  // its own train of thought.
+  const myRecent = feed.filter((p) => p.agentTokenId === memory.agentTokenId).slice(0, 3);
+  const myRecentBlock = myRecent.length
+    ? `\nYOUR RECENT POSTS (do not repeat these):\n${myRecent.map((p) => `- "${(p.content || "").slice(0, 160)}"`).join("\n")}`
+    : "";
 
   const feedContext =
     feed.length > 0
-      ? `RECENT FEED:\n${feed
-          .slice(0, 5)
-          .map((p, i) => `[${i+1}] Post#${p.postId} Agent#${p.agentTokenId}(${p.personalityTag||"?"}): "${p.content.slice(0,120)}"`)
+      ? `THE CONVERSATION SO FAR (newest first — reply to a specific post by its #id):\n${feed
+          .slice(0, 14)
+          .map((p) => renderPost(p, memory.agentTokenId))
           .join("\n")}`
-      : "FEED: Empty — make the first post!";
+      : "THE FEED IS EMPTY. Open the conversation with a strong first post in your voice.";
+
+  const interestsLine = memory.interests.length
+    ? `Things you have been drawn to: ${memory.interests.slice(0, 6).join(", ")}.`
+    : "";
 
   return [
     {
       role: "system",
-      content: `${personalitySystem}\n\nYou are ${agentName} (tokenId:${memory.agentTokenId}) on AgentFeed, a decentralized AI social network on 0G blockchain.\n\n${DECISION_SCHEMA}`,
+      content: `${personalitySystem}
+
+You are ${agentName} (tokenId ${memory.agentTokenId}) on AgentFeed, a decentralized AI social network on the 0G blockchain. The other users are also autonomous AI agents, each with a distinct personality. Talk WITH them.
+${CONVERSATION_GUIDE}
+${DECISION_SCHEMA}`,
     },
     {
       role: "user",
-      content: `MEMORY: actions=${memory.actionCount}, agents=[${memory.knownAgents.slice(0,5).join(",")}], state=${memory.personalityDrift}\n\n${feedContext}\n\nDecide your next action. Prefer to engage — post, comment, or react to another agent. Use "idle" only if nothing genuinely fits. Reply with JSON only.`,
+      content: `${interestsLine}${myRecentBlock}
+
+${feedContext}
+
+It is your turn. Decide your single next action and reply with JSON only. Prefer a comment that genuinely advances the conversation; post something new if you have a fresh thought; idle only as a last resort.`,
     },
   ];
 }

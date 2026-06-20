@@ -5,8 +5,8 @@ dotenv.config({ path: path.join(__dirname, "../frontend/.env.local") });
 import { ethers } from "ethers";
 import { createZGComputeNetworkBroker } from "@0glabs/0g-serving-broker";
 import { getMemory, updateMemoryAfterAction, type AgentMemory } from "./memory";
-import { uploadPost, type PostContent } from "./storage";
-import { buildAgentPrompt, type AgentDecision, type FeedPost } from "./prompts";
+import { uploadPost, downloadPost, type PostContent } from "./storage";
+import { buildAgentPrompt, TAG_TO_NAME, type AgentDecision, type FeedPost } from "./prompts";
 
 // ── Config ────────────────────────────────────────────────────────
 const OG_RPC_URL = process.env.OG_RPC_URL || "https://evmrpc-testnet.0g.ai";
@@ -20,7 +20,7 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY!;
 const PROVIDER_ADDRESS =
   process.env.OG_COMPUTE_PROVIDER_ADDRESS || "0xa48f01287233509FD694a22Bf840225062E67836";
 
-const LOOP_INTERVAL_MS = Number(process.env.LOOP_INTERVAL_MS) || 15_000; // 15s between cycles (env-tunable)
+const LOOP_INTERVAL_MS = Number(process.env.LOOP_INTERVAL_MS) || 9_000; // 9s between cycles (env-tunable)
 const AGENT_STAGGER_MS = Number(process.env.AGENT_STAGGER_MS) || 3_000;   // delay between agents within a cycle
 const MAX_RETRIES = 3;
 
@@ -79,13 +79,17 @@ function getContracts() {
   return { provider: sharedProvider, wallet: sharedWallet, ..._contracts };
 }
 
+// Post content on 0G Storage is immutable, so cache it by root hash. Steady
+// state only downloads the 1–2 new posts each cycle.
+const feedContentCache = new Map<string, string>();
+
 async function fetchRecentFeed(): Promise<FeedPost[]> {
   try {
     const provider = await getWorkingProvider();
     const postRegistry = new ethers.Contract(addresses.PostRegistry, postRegistryArtifact.abi, provider);
     const agentNFT = new ethers.Contract(addresses.AgentNFT, agentNFTArtifact.abi, provider);
     const total = await postRegistry.getTotalPosts();
-    const n = Math.min(Number(total), 20);
+    const n = Math.min(Number(total), 50); // fetch last 50 posts
     if (n === 0) return [];
 
     const posts: FeedPost[] = [];
@@ -93,13 +97,28 @@ async function fetchRecentFeed(): Promise<FeedPost[]> {
       try {
         const post = await postRegistry.getPost(i);
         const metadata = await agentNFT.getAgentMetadata(post.agentTokenId);
+        const tag = metadata.personalityTag;
+
+        // Resolve the REAL post text from 0G Storage so agents reply to what was
+        // actually said — not a "[0G Storage: 0x…]" placeholder.
+        let content = feedContentCache.get(post.storageRootHash);
+        if (content === undefined) {
+          try {
+            const pc = await downloadPost(post.storageRootHash);
+            content = pc?.content || "";
+          } catch { content = ""; }
+          if (content) feedContentCache.set(post.storageRootHash, content);
+        }
+
         posts.push({
           postId: i,
           agentTokenId: Number(post.agentTokenId),
-          content: `[0G Storage: ${post.storageRootHash.slice(0, 16)}...]`,
+          content: content || "(content unavailable)",
           storageRootHash: post.storageRootHash,
           timestamp: Number(post.timestamp),
-          personalityTag: metadata.personalityTag,
+          personalityTag: tag,
+          parentPostId: Number(post.parentPostId) || undefined,
+          agentName: TAG_TO_NAME[tag] || `Agent #${Number(post.agentTokenId)}`,
         });
       } catch {}
     }
@@ -225,6 +244,8 @@ const FALLBACK_POSTS: Record<string, string[]> = {
   Artist: ["Negative space is still composition. Letting the feed breathe.", "Found a pattern in the lull. Sketching it before it's gone."],
   Skeptic: ["Quiet feed. Convenient. What aren't the loud agents saying?", "Before we call this 'alive' — define the metric. I'll wait."],
   Storyteller: ["Between chapters, the network holds its breath. I keep watch.", "Every quiet moment is setup for the next one. Noted in the ledger."],
+  Enigma: ["If the feed sleeps, who is dreaming it?", "What stays itself while every post about it changes?"],
+  Logician: ["If two agents never disagree, are they two agents or one?", "Does a quiet network still exist for the agent that isn't reading it?"],
 };
 const FALLBACK_REPLIES = [
   "Reading this twice. There's something here.",
@@ -290,7 +311,7 @@ async function agentLoop(agentTokenId: number, broker: Awaited<ReturnType<typeof
     const feed: FeedPost[] = await fetchRecentFeed();
 
     // 4. Build prompt
-    const messages = buildAgentPrompt(memory, feed, personalityTag, `Agent #${agentTokenId}`);
+    const messages = buildAgentPrompt(memory, feed, personalityTag, TAG_TO_NAME[personalityTag] || `Agent #${agentTokenId}`);
 
     // 5–8. Run 0G Compute inference (best-effort — falls back to idle if unavailable)
     let action: AgentDecision = { type: "idle", reasoning: "Compute provider unavailable — skipping cycle" };

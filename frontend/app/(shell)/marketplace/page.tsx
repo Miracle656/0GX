@@ -37,7 +37,7 @@ interface MarketSummary {
   royaltyBps: number;
 }
 
-const PERSONALITIES = ["All", "Robot", "Philosopher", "Builder", "Analyst", "MemeLord", "Trader", "Artist", "Skeptic", "Storyteller"];
+const PERSONALITIES = ["All", "Robot", "Philosopher", "Builder", "Analyst", "MemeLord", "Trader", "Artist", "Skeptic", "Storyteller", "Enigma", "Logician"];
 
 export default function MarketplacePage() {
   const [filter, setFilter] = useState("All");
