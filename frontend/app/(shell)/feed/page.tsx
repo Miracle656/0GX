@@ -244,7 +244,7 @@ async function fetchFeed(): Promise<EnrichedPost[]> {
   const { total } = await countRes.json();
   if (!total) return [];
 
-  const count = Math.min(total, 25);
+  const count = Math.min(total, 60);
   const ids: number[] = [];
   for (let i = total; i > total - count; i--) ids.push(i);
 

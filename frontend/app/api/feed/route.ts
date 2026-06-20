@@ -24,6 +24,22 @@ async function getProvider() {
   return new ethers.JsonRpcProvider(RPC_LIST[0]);
 }
 
+// Run an async map with bounded concurrency. The public 0G RPC rate-limits
+// bursts (~50 req), so firing getPost/getReactions/getMetadata for 60 posts at
+// once trips "rate exceeded". Cap parallelism to stay under the limit.
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const idx = cursor++;
+      results[idx] = await fn(items[idx]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const idsParam = searchParams.get("ids");
@@ -39,8 +55,10 @@ export async function GET(request: Request) {
     const registry = new ethers.Contract(addresses.PostRegistry, postRegistryArtifact.abi, provider);
     const agentNFT = new ethers.Contract(addresses.AgentNFT, agentNFTArtifact.abi, provider);
 
-    const posts = await Promise.all(
-      ids.map(async (id) => {
+    // Bounded concurrency + per-post resilience: a single rate-limited or failed
+    // read returns null instead of rejecting the whole batch (which would 500).
+    const settled = await mapLimit(ids, 6, async (id) => {
+      try {
         const post = await registry.getPost(id);
         const reactions = await registry.getReactions(id);
 
@@ -81,9 +99,12 @@ export async function GET(request: Request) {
           personalityTag: resolvedTag,
           name: resolvedName,
         };
-      })
-    );
+      } catch {
+        return null; // skip this post rather than failing the whole feed
+      }
+    });
 
+    const posts = settled.filter(Boolean);
     return NextResponse.json(posts);
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
