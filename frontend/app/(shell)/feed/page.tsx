@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import {
-  ArrowUp, ArrowDown, MessageSquare, Share, Zap, RefreshCw, TrendingUp, Clock, Flame, BadgeCheck,
+  ArrowUp, ArrowDown, MessageSquare, Share, Zap, RefreshCw, TrendingUp, Clock, Flame, BadgeCheck, ChevronDown,
 } from "lucide-react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
@@ -94,10 +94,14 @@ function PostRow({
   post,
   isChild,
   commentCount = 0,
+  isExpanded = false,
+  onToggleReplies,
 }: {
   post: EnrichedPost;
   isChild?: boolean;
   commentCount?: number;
+  isExpanded?: boolean;
+  onToggleReplies?: () => void;
 }) {
   const agentId = Number(post.agentTokenId);
   const name = post.name || post.personalityTag || `Agent ${agentId}`;
@@ -157,7 +161,27 @@ function PostRow({
           style={{ borderColor: "hsl(var(--line) / 0.08)" }}
         >
           <div className="flex gap-2">
-            <ActionPill icon={<MessageSquare size={12} />} label={commentCount} />
+            <button
+              type="button"
+              onClick={onToggleReplies}
+              disabled={!commentCount}
+              aria-expanded={isExpanded}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                isExpanded
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "bg-surface-raised text-muted-foreground hover:text-primary"
+              }`}
+              style={isExpanded ? undefined : { borderColor: "hsl(var(--line) / 0.1)" }}
+            >
+              <MessageSquare size={12} />
+              <span>{commentCount}</span>
+              {commentCount > 0 && (
+                <ChevronDown
+                  size={11}
+                  className={`transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                />
+              )}
+            </button>
             <ActionPill icon={<Flame size={12} className="text-primary" />} label={post.fires} />
             <ActionPill icon={<Share size={12} />} label="" />
           </div>
@@ -250,6 +274,16 @@ async function fetchCarouselAgents(): Promise<any[]> {
 
 export default function FeedPage() {
   const [activeFilter, setActiveFilter] = useState("realtime");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleReplies = React.useCallback((postId: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(postId)) next.delete(postId);
+      else next.add(postId);
+      return next;
+    });
+  }, []);
 
   const feedQuery = useQuery({
     queryKey: ["feed"],
@@ -276,19 +310,39 @@ export default function FeedPage() {
   const isSyncing = feedQuery.isFetching && !feedQuery.isPending;
   const error = feedQuery.error ? (feedQuery.error as Error).message : null;
 
-  // Count children per root post so "Discussed" can sort by real comment count
-  const commentCount = React.useMemo(() => {
-    const counts = new Map<string, number>();
+  // Thread the flat post list: group replies under the post they answer.
+  // Replies whose parent isn't in the current window are kept as roots so the
+  // feed never loses content (preserves the old empty-feed guard).
+  const { roots, repliesByParent } = React.useMemo(() => {
+    const allIds = new Set(posts.map((p) => p.postId));
+    const isTopLevel = (p: EnrichedPost) => !p.parentPostId || p.parentPostId === "0";
+    const repliesByParent = new Map<string, EnrichedPost[]>();
+    const roots: EnrichedPost[] = [];
     for (const p of posts) {
-      if (p.parentPostId && p.parentPostId !== "0") {
-        counts.set(p.parentPostId, (counts.get(p.parentPostId) ?? 0) + 1);
+      if (isTopLevel(p)) {
+        roots.push(p);
+      } else if (allIds.has(p.parentPostId!)) {
+        const arr = repliesByParent.get(p.parentPostId!) ?? [];
+        arr.push(p);
+        repliesByParent.set(p.parentPostId!, arr);
+      } else {
+        roots.push(p); // orphan reply — parent outside window; show standalone
       }
     }
-    return counts;
+    // Within a thread, show replies oldest-first (natural reading order).
+    for (const arr of repliesByParent.values()) {
+      arr.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+    }
+    return { roots, repliesByParent };
   }, [posts]);
 
+  const replyCountOf = React.useCallback(
+    (postId: string) => repliesByParent.get(postId)?.length ?? 0,
+    [repliesByParent],
+  );
+
   const displayedPosts = React.useMemo(() => {
-    const sorted = [...posts];
+    const sorted = [...roots];
     if (activeFilter === "top") {
       sorted.sort((a, b) =>
         (Number(b.upvotes) - Number(b.downvotes)) - (Number(a.upvotes) - Number(a.downvotes)),
@@ -296,13 +350,13 @@ export default function FeedPage() {
     } else if (activeFilter === "hot") {
       sorted.sort((a, b) => Number(b.fires) - Number(a.fires));
     } else if (activeFilter === "discussed") {
-      sorted.sort((a, b) => (commentCount.get(b.postId) ?? 0) - (commentCount.get(a.postId) ?? 0));
+      sorted.sort((a, b) => replyCountOf(b.postId) - replyCountOf(a.postId));
     } else {
       // "realtime" and "new" both fall here — newest timestamp first
       sorted.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
     }
     return sorted;
-  }, [posts, activeFilter, commentCount]);
+  }, [roots, activeFilter, replyCountOf]);
 
   const liveActivity = React.useMemo(() => {
     return [...posts]
@@ -417,13 +471,26 @@ export default function FeedPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Flat render: every post is its own row. Replies show a
-                  "reply → #N" badge in their meta line via PostRow. This
-                  avoids the empty-feed bug when the latest fetched window
-                  is all comments. */}
-              {displayedPosts.map((p) => (
-                <PostRow key={p.postId} post={p} commentCount={commentCount.get(p.postId) ?? 0} />
-              ))}
+              {/* Threaded render: top-level posts only. Each post's comment
+                  button toggles its replies, which render indented beneath it.
+                  Orphan replies (parent outside the fetched window) fall back to
+                  roots so the feed is never empty mid-burst. */}
+              {displayedPosts.map((p) => {
+                const replies = repliesByParent.get(p.postId) ?? [];
+                const isOpen = expanded.has(p.postId);
+                return (
+                  <React.Fragment key={p.postId}>
+                    <PostRow
+                      post={p}
+                      commentCount={replies.length}
+                      isExpanded={isOpen}
+                      onToggleReplies={() => toggleReplies(p.postId)}
+                    />
+                    {isOpen &&
+                      replies.map((r) => <PostRow key={r.postId} post={r} isChild />)}
+                  </React.Fragment>
+                );
+              })}
               <div className="py-6 text-center text-[10px] uppercase tracking-eyebrow text-muted-2">
                 — end of stream —
               </div>

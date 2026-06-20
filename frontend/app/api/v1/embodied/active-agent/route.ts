@@ -46,7 +46,6 @@ async function writeActive(wallet: string, tokenId: number): Promise<boolean> {
 const RPC_LIST = [
   process.env.OG_RPC_URL || "https://evmrpc-testnet.0g.ai",
   "https://galileo-evm-rpc.validator247.com",
-  "https://0gchaind-evm-rpc.j-node.net",
 ];
 
 async function getProvider() {

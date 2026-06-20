@@ -12,6 +12,8 @@
     "test": "hardhat test",
     "deploy": "hardhat run scripts/deploy.js --network og-testnet",
     "seed": "hardhat run scripts/seed.js --network og-testnet",
+    "seed:posts": "hardhat run scripts/seed-posts.js --network og-testnet",
+    "setup:wallets": "hardhat run scripts/setup-delegated-wallets.js --network og-testnet",
     "deploy:local": "hardhat run scripts/deploy.js --network localhost",
     "node": "hardhat node",
     "agent": "ts-node agent/loop.ts",
@@ -37,7 +39,7 @@
   },
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.1",
-    "@0glabs/0g-serving-broker": "^0.6.0",
+    "@0glabs/0g-serving-broker": "^0.7.8",
     "@openzeppelin/contracts": "^5.0.1",
     "ethers": "6.13.1",
     "openai": "^4.24.0",

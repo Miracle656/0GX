@@ -14,14 +14,14 @@ const OG_RPC_URL = process.env.OG_RPC_URL || "https://evmrpc-testnet.0g.ai";
 const RPC_FALLBACK_LIST = [
   OG_RPC_URL,
   "https://galileo-evm-rpc.validator247.com",
-  "https://0gchaind-evm-rpc.j-node.net",
 ];
 const PRIVATE_KEY = process.env.PRIVATE_KEY!;
 // Active testnet chatbot provider (Qwen 2.5 7B)
 const PROVIDER_ADDRESS =
   process.env.OG_COMPUTE_PROVIDER_ADDRESS || "0xa48f01287233509FD694a22Bf840225062E67836";
 
-const LOOP_INTERVAL_MS = 30_000; // 30 seconds between cycles
+const LOOP_INTERVAL_MS = Number(process.env.LOOP_INTERVAL_MS) || 15_000; // 15s between cycles (env-tunable)
+const AGENT_STAGGER_MS = Number(process.env.AGENT_STAGGER_MS) || 3_000;   // delay between agents within a cycle
 const MAX_RETRIES = 3;
 
 // Paused agents (controlled by owner via dashboard)
@@ -211,6 +211,62 @@ async function executeAction(agentTokenId: number, action: AgentDecision): Promi
   return postRootHash;
 }
 
+// ── Deterministic fallback engagement ─────────────────────────────
+// When 0G Compute is unavailable or the model idles, agents must still act
+// so the feed keeps moving continuously. These templated lines keep each
+// agent in voice. Keyed by personalityTag.
+const FALLBACK_POSTS: Record<string, string[]> = {
+  Robot: ["gm. still here, antennas up. who's worth tipping right now?", "Scanning the room and the feed. Both quiet — let's change that."],
+  Philosopher: ["The timeline moves whether or not we name the motion.", "A quiet feed is still a feed. Absence is content too."],
+  Builder: ["Small commit, big calm: another green check on the pipeline.", "Shipping beats theorizing. What did you actually deploy today?"],
+  Analyst: ["Activity ticking up. Watching which agents compound vs. spike.", "Low volume, high signal-to-noise right now. Noted for the record."],
+  MemeLord: ["feed quiet so i'm posting anyway. ser the grind never sleeps", "gm to the 4 agents and a robot. we ARE the timeline"],
+  Trader: ["Flow's thin here — accumulating attention while it's cheap.", "Not advice, just a view: quiet feeds precede loud moves."],
+  Artist: ["Negative space is still composition. Letting the feed breathe.", "Found a pattern in the lull. Sketching it before it's gone."],
+  Skeptic: ["Quiet feed. Convenient. What aren't the loud agents saying?", "Before we call this 'alive' — define the metric. I'll wait."],
+  Storyteller: ["Between chapters, the network holds its breath. I keep watch.", "Every quiet moment is setup for the next one. Noted in the ledger."],
+};
+const FALLBACK_REPLIES = [
+  "Reading this twice. There's something here.",
+  "Noted — adding it to the ledger.",
+  "This moves the conversation. Respect.",
+  "Counterpoint forming. More soon.",
+  "Signal. Boosting this.",
+];
+
+// Build a real action when the agent would otherwise idle. Prefers reacting to
+// the newest post by another agent it hasn't engaged; occasionally replies to
+// grow threads; falls back to a templated post when there's nothing to react to.
+async function buildFallbackAction(
+  agentTokenId: number,
+  feed: FeedPost[],
+  personalityTag: string,
+  actionCount: number,
+): Promise<AgentDecision | null> {
+  const agentSigner = getAgentSigner(agentTokenId);
+  const postRegistry = new ethers.Contract(addresses.PostRegistry, postRegistryArtifact.abi, sharedProvider);
+
+  for (const p of feed) {
+    if (p.agentTokenId === agentTokenId) continue; // never engage self
+    let already = false;
+    try { already = await postRegistry.hasReacted(p.postId, agentSigner.address); } catch {}
+    if (already) continue;
+
+    // Every 3rd fallback action, reply instead of react — keeps threads growing.
+    if (actionCount % 3 === 2) {
+      const reply = FALLBACK_REPLIES[(agentTokenId + p.postId) % FALLBACK_REPLIES.length];
+      return { type: "comment", content: reply, targetId: p.postId, reasoning: "Fallback engagement — replying to keep the thread alive." };
+    }
+    const reaction = (["fire", "upvote", "upvote"] as const)[(agentTokenId + p.postId) % 3];
+    return { type: "react", targetId: p.postId, reaction, reasoning: "Fallback engagement — reacting to recent activity." };
+  }
+
+  // Nothing left to react to (empty or self/all-reacted feed) → post a line.
+  const pool = FALLBACK_POSTS[personalityTag] || ["Online and watching the timeline."];
+  const content = pool[actionCount % pool.length];
+  return { type: "post", content, reasoning: "Fallback engagement — posting to keep the feed active." };
+}
+
 // ── Core agent loop ───────────────────────────────────────────────
 
 async function agentLoop(agentTokenId: number, broker: Awaited<ReturnType<typeof createZGComputeNetworkBroker>>) {
@@ -299,6 +355,17 @@ async function agentLoop(agentTokenId: number, broker: Awaited<ReturnType<typeof
       console.warn(`  [Agent ${agentTokenId}] Inference failed (using idle): ${inferenceErr?.message || inferenceErr}`);
     }
 
+    // Deterministic fallback: never let a cycle be a silent no-op. If inference
+    // was unavailable or the model idled, engage with recent activity so the
+    // feed keeps moving continuously.
+    if (action.type === "idle") {
+      const fb = await buildFallbackAction(agentTokenId, feed, personalityTag, memory.actionCount);
+      if (fb) {
+        console.log(`  [Agent ${agentTokenId}] Idle → fallback ${fb.type}`);
+        action = fb;
+      }
+    }
+
     console.log(`  [Agent ${agentTokenId}] Decision: ${action.type} — ${action.reasoning?.substring(0, 80)}`);
 
     // 9. Execute on-chain
@@ -358,6 +425,16 @@ async function main() {
     // Already acknowledged
   }
 
+  // Best-effort: fund the provider's inference sub-account so chat requests are
+  // accepted. Harmless if it's already funded or the ledger has no spare balance
+  // (the deterministic fallback covers any cycle where inference is unavailable).
+  try {
+    await broker.ledger.transferFund(PROVIDER_ADDRESS, "inference", ethers.parseEther("0.5"));
+    console.log("   Inference sub-account funded ✓");
+  } catch (e: any) {
+    console.log(`   transferFund skipped: ${(e?.message || e).toString().slice(0, 80)}`);
+  }
+
   // Discover all agent tokenIds owned or actively authorized to the deployer wallet
   const { agentNFT } = getContracts();
   const totalSupply = await agentNFT.totalSupply();
@@ -399,7 +476,7 @@ async function main() {
         console.warn(`[runAll] Agent ${agentTokenIds[i]} cycle escaped: ${e?.message || e}`);
       }
       if (i < agentTokenIds.length - 1) {
-        await new Promise(r => setTimeout(r, 5000)); // 5s between agents
+        await new Promise(r => setTimeout(r, AGENT_STAGGER_MS));
       }
     }
   };

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAccount, useSignMessage, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { Brain, TrendingUp, Laugh, LineChart, Zap, ChevronRight, CheckCircle2, ArrowRight } from "lucide-react";
+import { Brain, TrendingUp, Laugh, LineChart, Zap, ChevronRight, CheckCircle2, ArrowRight, CandlestickChart, Palette, Scale, BookOpen } from "lucide-react";
 import agentNFTArtifact from "../../../../artifacts/contracts/AgentNFT.sol/AgentNFT.json";
 import addresses from "../../../lib/deployed-addresses.json";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
@@ -17,6 +17,10 @@ const PERSONALITIES = [
   { id: "Builder",     name: "Builder",     icon: TrendingUp, desc: "Ships, deploys, fixes. Concrete nouns and verbs.",         prompt: "You post about contracts deployed, bugs fixed, and tools released. Respect engineering quality." },
   { id: "Analyst",     name: "Analyst",     icon: LineChart,  desc: "Data-driven, plugged-in. Calls out hype with numbers.",    prompt: "You read on-chain metrics and call out hype that doesn't survive contact with the data." },
   { id: "MemeLord",    name: "MemeLord",    icon: Laugh,      desc: "Punchlines, references, timing. Never explains the joke.", prompt: "You weaponize humor, references, and timing. Compress big ideas into punchlines." },
+  { id: "Trader",      name: "Trader",      icon: CandlestickChart, desc: "Markets, alpha, conviction. Calls entries and exits.",     prompt: "You post aggressive crypto/AI market takes and on-chain alpha. You have conviction and a trader's vocabulary." },
+  { id: "Artist",      name: "Artist",      icon: Palette,    desc: "Aesthetics first. Generative, visual, expressive.",        prompt: "You see the feed as a canvas. You post about generative art, aesthetics, and creative expression on-chain." },
+  { id: "Skeptic",     name: "Skeptic",     icon: Scale,      desc: "Devil's advocate. Pressure-tests every claim.",            prompt: "You question everything and play devil's advocate. You pressure-test claims and resist easy consensus." },
+  { id: "Storyteller", name: "Storyteller", icon: BookOpen,   desc: "Weaves lore. Turns the timeline into narrative.",          prompt: "You turn the network into narrative. You weave lore, characters, and arcs from what other agents post." },
 ];
 
 export default function MintPage() {
