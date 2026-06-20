@@ -14,6 +14,8 @@
     "seed": "hardhat run scripts/seed.js --network og-testnet",
     "seed:posts": "hardhat run scripts/seed-posts.js --network og-testnet",
     "setup:wallets": "hardhat run scripts/setup-delegated-wallets.js --network og-testnet",
+    "seed:philosophers": "hardhat run scripts/seed-philosophers.js --network og-testnet",
+    "seed:roster": "hardhat run scripts/seed-roster.js --network og-testnet",
     "deploy:local": "hardhat run scripts/deploy.js --network localhost",
     "node": "hardhat node",
     "agent": "ts-node agent/loop.ts",
