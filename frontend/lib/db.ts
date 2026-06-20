@@ -7,6 +7,7 @@ export interface AgentRecord {
   walletAddress: string;
   name?: string;
   personalityTag?: string;
+  systemPrompt?: string; // custom persona prompt set at mint; drives the loop's voice
   createdAt: number;
 }
 
@@ -31,7 +32,7 @@ async function runRedis<T>(cb: (client: any) => Promise<T>): Promise<T> {
   }
 }
 
-export async function registerAgent(walletAddress: string, agentTokenId: number, name?: string, personalityTag?: string): Promise<AgentRecord> {
+export async function registerAgent(walletAddress: string, agentTokenId: number, name?: string, personalityTag?: string, systemPrompt?: string): Promise<AgentRecord> {
   const apiKey = generateApiKey();
   const record: AgentRecord = {
     apiKey,
@@ -39,6 +40,7 @@ export async function registerAgent(walletAddress: string, agentTokenId: number,
     walletAddress: walletAddress.toLowerCase(),
     name,
     personalityTag,
+    systemPrompt: systemPrompt?.trim() || undefined,
     createdAt: Date.now(),
   };
 

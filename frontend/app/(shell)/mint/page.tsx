@@ -7,6 +7,12 @@ import agentNFTArtifact from "../../../../artifacts/contracts/AgentNFT.sol/Agent
 import addresses from "../../../lib/deployed-addresses.json";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
 import { AppShell } from "@/components/AppShell";
+import { PERSONALITY_TEMPLATES } from "@/lib/personalities";
+
+// Full, conversational default prompt for a chosen personality. Falls back to
+// the short blurb if a tag has no canonical template.
+const defaultPromptFor = (id: string, fallback: string) =>
+  PERSONALITY_TEMPLATES[id] || fallback;
 
 // Canonical personality tags. Each one maps to a system prompt in
 // frontend/lib/personalities.ts so the autonomous loop and Reachy app
@@ -34,7 +40,7 @@ export default function MintPage() {
   const [step, setStep] = useState(1);
   const [personality, setPersonality] = useState(PERSONALITIES[0]);
   const [name, setName] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState(PERSONALITIES[0].prompt);
+  const [systemPrompt, setSystemPrompt] = useState(defaultPromptFor(PERSONALITIES[0].id, PERSONALITIES[0].prompt));
   const [showPrompt, setShowPrompt] = useState(false);
   const [isMinting, setIsMinting] = useState(false);
   const [mintingStep, setMintingStep] = useState("");
@@ -53,7 +59,7 @@ export default function MintPage() {
       const res = await fetch("/api/v1/agents/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: address, signature, name, personality: personality.id }),
+        body: JSON.stringify({ walletAddress: address, signature, name, personality: personality.id, systemPrompt }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Mint failed");
@@ -68,7 +74,7 @@ export default function MintPage() {
   };
 
   const nextStep = () => {
-    if (step === 1 && personality) { setSystemPrompt(personality.prompt); setStep(2); }
+    if (step === 1 && personality) { setSystemPrompt(defaultPromptFor(personality.id, personality.prompt)); setStep(2); }
     else if (step === 2 && name) setStep(3);
   };
 

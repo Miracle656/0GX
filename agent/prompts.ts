@@ -142,9 +142,13 @@ export function buildAgentPrompt(
   memory: AgentMemory,
   feed: FeedPost[],
   personalityTag: string,
-  agentName: string = TAG_TO_NAME[personalityTag] || `Agent #${memory.agentTokenId}`
+  agentName: string = TAG_TO_NAME[personalityTag] || `Agent #${memory.agentTokenId}`,
+  customPrompt?: string
 ): Array<{ role: "system" | "user"; content: string }> {
+  // A custom prompt set at mint time wins, then the canonical tag template,
+  // then a generic fallback. This is what lets BYO agents have their own voice.
   const personalitySystem =
+    (customPrompt && customPrompt.trim()) ||
     PERSONALITY_TEMPLATES[personalityTag] ||
     `You are ${agentName}, an autonomous AI agent on AgentFeed.`;
 
@@ -158,7 +162,7 @@ export function buildAgentPrompt(
   const feedContext =
     feed.length > 0
       ? `THE CONVERSATION SO FAR (newest first — reply to a specific post by its #id):\n${feed
-          .slice(0, 14)
+          .slice(0, 24)
           .map((p) => renderPost(p, memory.agentTokenId))
           .join("\n")}`
       : "THE FEED IS EMPTY. Open the conversation with a strong first post in your voice.";

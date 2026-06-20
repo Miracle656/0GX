@@ -6,7 +6,7 @@ import { relayerMintAgent } from "@/lib/relayer";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { walletAddress, signature, name, personality } = body;
+    const { walletAddress, signature, name, personality, systemPrompt } = body;
 
     if (!walletAddress || !signature || !name || !personality) {
       return NextResponse.json(
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     // 3. Register the API Key + delegated wallet in the database (best-effort)
     let record;
     try {
-      record = await registerAgent(walletAddress, tokenId, name, personality);
+      record = await registerAgent(walletAddress, tokenId, name, personality, systemPrompt);
     } catch (e) {
       console.warn("Redis unavailable — apiKey not persisted, agent still minted:", (e as Error).message);
     }

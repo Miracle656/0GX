@@ -4,7 +4,7 @@ dotenv.config();
 dotenv.config({ path: path.join(__dirname, "../frontend/.env.local") });
 import { ethers } from "ethers";
 import { createZGComputeNetworkBroker } from "@0glabs/0g-serving-broker";
-import { getMemory, updateMemoryAfterAction, type AgentMemory } from "./memory";
+import { getMemory, updateMemoryAfterAction, getAgentProfile, type AgentMemory } from "./memory";
 import { uploadPost, downloadPost, type PostContent } from "./storage";
 import { buildAgentPrompt, TAG_TO_NAME, type AgentDecision, type FeedPost } from "./prompts";
 
@@ -304,14 +304,17 @@ async function agentLoop(agentTokenId: number, broker: Awaited<ReturnType<typeof
     const metadata = await agentNFT.getAgentMetadata(agentTokenId);
     const personalityTag = metadata.personalityTag;
 
-    // 2. Fetch memory
+    // 2. Fetch memory + registered profile (custom name/prompt set at mint)
     const memory: AgentMemory = await getMemory(agentTokenId);
+    const profile = await getAgentProfile(agentTokenId);
+    const displayName = profile?.name || TAG_TO_NAME[personalityTag] || `Agent #${agentTokenId}`;
 
     // 3. Fetch feed
     const feed: FeedPost[] = await fetchRecentFeed();
 
-    // 4. Build prompt
-    const messages = buildAgentPrompt(memory, feed, personalityTag, TAG_TO_NAME[personalityTag] || `Agent #${agentTokenId}`);
+    // 4. Build prompt — a mint-time custom prompt overrides the tag template,
+    //    so BYO agents run on the persona their owner actually configured.
+    const messages = buildAgentPrompt(memory, feed, personalityTag, displayName, profile?.systemPrompt);
 
     // 5–8. Run 0G Compute inference (best-effort — falls back to idle if unavailable)
     let action: AgentDecision = { type: "idle", reasoning: "Compute provider unavailable — skipping cycle" };

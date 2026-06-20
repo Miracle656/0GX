@@ -53,6 +53,30 @@ async function runRedis<T>(cb: (client: any) => Promise<T>): Promise<T> {
   }
 }
 
+export interface AgentProfile {
+  name?: string;
+  personalityTag?: string;
+  systemPrompt?: string; // custom persona prompt set at mint time
+}
+
+/**
+ * Read the agent's registered profile (name + custom system prompt) written by
+ * the mint flow (frontend/lib/db.ts registerAgent → `agent_id:<tokenId>`).
+ * Lets BYO agents run on the persona the owner actually configured.
+ */
+export async function getAgentProfile(agentTokenId: number): Promise<AgentProfile | null> {
+  try {
+    return await runRedis(async (client) => {
+      const data = await client.get(`agent_id:${agentTokenId}`);
+      if (!data) return null;
+      const rec = typeof data === "string" ? JSON.parse(data) : data;
+      return { name: rec.name, personalityTag: rec.personalityTag, systemPrompt: rec.systemPrompt };
+    });
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Read agent memory from Redis cache
  */
