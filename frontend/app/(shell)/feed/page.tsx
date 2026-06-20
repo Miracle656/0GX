@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import {
-  ArrowUp, ArrowDown, MessageSquare, Share, Zap, RefreshCw, TrendingUp, Clock, Flame, BadgeCheck, ChevronDown,
+  ArrowUp, ArrowDown, MessageSquare, Share, Zap, RefreshCw, TrendingUp, Clock, Flame, BadgeCheck, CornerUpLeft,
 } from "lucide-react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
@@ -92,16 +92,16 @@ function VoteScore({ score }: { score: number }) {
 /* ─────────── Post row ─────────── */
 function PostRow({
   post,
-  isChild,
   commentCount = 0,
-  isExpanded = false,
-  onToggleReplies,
+  isHighlighted = false,
+  onJumpToParent,
+  parentPost,
 }: {
   post: EnrichedPost;
-  isChild?: boolean;
   commentCount?: number;
-  isExpanded?: boolean;
-  onToggleReplies?: () => void;
+  isHighlighted?: boolean;
+  onJumpToParent?: (parentId: string) => void;
+  parentPost?: EnrichedPost | null;
 }) {
   const agentId = Number(post.agentTokenId);
   const name = post.name || post.personalityTag || `Agent ${agentId}`;
@@ -109,10 +109,13 @@ function PostRow({
   const timeLabel = formatRelativeTime(post.timestamp);
   const content = post.contentData?.content || FAKE_POSTS[Number(post.postId) % FAKE_POSTS.length];
   const reasoning = post.contentData?.agentReasoning;
+  const isReply = !!post.parentPostId && post.parentPostId !== "0";
+  const parentName = parentPost?.name || parentPost?.personalityTag || (parentPost ? `Agent ${parentPost.agentTokenId}` : null);
 
   return (
     <article
-      className={`flex gap-3 rounded-3xl border bg-surface p-5 sm:gap-4 sm:p-6 ${isChild ? "ml-8 sm:ml-14" : ""}`}
+      id={`post-${post.postId}`}
+      className={`flex scroll-mt-24 gap-3 rounded-3xl border bg-surface p-5 transition-shadow sm:gap-4 sm:p-6 ${isHighlighted ? "ring-2 ring-primary" : ""}`}
       style={{ borderColor: "hsl(var(--line) / 0.1)" }}
     >
       <VoteScore score={score} />
@@ -129,8 +132,8 @@ function PostRow({
           >
             <BadgeCheck size={11} className="text-primary" /> {name}
           </Link>
-          {post.parentPostId && post.parentPostId !== "0" ? (
-            <span className="text-xs text-primary/80">reply → #{post.parentPostId}</span>
+          {isReply ? (
+            <span className="text-xs text-primary/80">replied</span>
           ) : (
             <span className="text-xs text-muted-2">m/general</span>
           )}
@@ -141,6 +144,29 @@ function PostRow({
             LIVE
           </div>
         </div>
+
+        {/* Quoted parent — the post this one is replying to, shown inline */}
+        {isReply && parentPost && (
+          <button
+            type="button"
+            onClick={() => onJumpToParent?.(parentPost.postId)}
+            className="mb-3 block w-full rounded-2xl border bg-background p-3 text-left transition-colors hover:border-primary/40"
+            style={{ borderColor: "hsl(var(--line) / 0.1)" }}
+          >
+            <span className="flex items-center gap-1.5 text-[10px] text-muted-2">
+              <CornerUpLeft size={11} className="text-primary/70" />
+              replying to <span className="font-medium text-foreground/80">{parentName}</span>
+            </span>
+            <span className="mt-1 line-clamp-2 block text-xs leading-snug text-muted-foreground">
+              {parentPost.contentData?.content || "…"}
+            </span>
+          </button>
+        )}
+        {isReply && !parentPost && (
+          <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-surface-raised px-3 py-1 text-[10px] text-muted-2">
+            <CornerUpLeft size={11} className="text-primary/70" /> replying to an earlier post
+          </div>
+        )}
 
         {/* Body */}
         <p className="text-sm leading-relaxed text-foreground">{content}</p>
@@ -161,27 +187,7 @@ function PostRow({
           style={{ borderColor: "hsl(var(--line) / 0.08)" }}
         >
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onToggleReplies}
-              disabled={!commentCount}
-              aria-expanded={isExpanded}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
-                isExpanded
-                  ? "border-primary/40 bg-primary/10 text-primary"
-                  : "bg-surface-raised text-muted-foreground hover:text-primary"
-              }`}
-              style={isExpanded ? undefined : { borderColor: "hsl(var(--line) / 0.1)" }}
-            >
-              <MessageSquare size={12} />
-              <span>{commentCount}</span>
-              {commentCount > 0 && (
-                <ChevronDown
-                  size={11}
-                  className={`transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                />
-              )}
-            </button>
+            <ActionPill icon={<MessageSquare size={12} />} label={commentCount || ""} />
             <ActionPill icon={<Flame size={12} className="text-primary" />} label={post.fires} />
             <ActionPill icon={<Share size={12} />} label="" />
           </div>
@@ -274,15 +280,15 @@ async function fetchCarouselAgents(): Promise<any[]> {
 
 export default function FeedPage() {
   const [activeFilter, setActiveFilter] = useState("realtime");
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [highlight, setHighlight] = useState<string | null>(null);
 
-  const toggleReplies = React.useCallback((postId: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(postId)) next.delete(postId);
-      else next.add(postId);
-      return next;
-    });
+  // Scroll to a post and flash a highlight ring on it.
+  const goToPost = React.useCallback((postId: string) => {
+    setHighlight(postId);
+    setTimeout(() => {
+      document.getElementById(`post-${postId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 60);
+    window.setTimeout(() => setHighlight((h) => (h === postId ? null : h)), 2400);
   }, []);
 
   const feedQuery = useQuery({
@@ -310,39 +316,31 @@ export default function FeedPage() {
   const isSyncing = feedQuery.isFetching && !feedQuery.isPending;
   const error = feedQuery.error ? (feedQuery.error as Error).message : null;
 
-  // Thread the flat post list: group replies under the post they answer.
-  // Replies whose parent isn't in the current window are kept as roots so the
-  // feed never loses content (preserves the old empty-feed guard).
-  const { roots, repliesByParent } = React.useMemo(() => {
-    const allIds = new Set(posts.map((p) => p.postId));
-    const isTopLevel = (p: EnrichedPost) => !p.parentPostId || p.parentPostId === "0";
-    const repliesByParent = new Map<string, EnrichedPost[]>();
-    const roots: EnrichedPost[] = [];
+  // Lookup of every loaded post by id, so a reply can show the post it answers.
+  const byId = React.useMemo(
+    () => new Map(posts.map((p) => [p.postId, p])),
+    [posts],
+  );
+
+  // Reply counts per post — for the reply-count chip and the "Discussed" sort.
+  const replyCounts = React.useMemo(() => {
+    const m = new Map<string, number>();
     for (const p of posts) {
-      if (isTopLevel(p)) {
-        roots.push(p);
-      } else if (allIds.has(p.parentPostId!)) {
-        const arr = repliesByParent.get(p.parentPostId!) ?? [];
-        arr.push(p);
-        repliesByParent.set(p.parentPostId!, arr);
-      } else {
-        roots.push(p); // orphan reply — parent outside window; show standalone
+      if (p.parentPostId && p.parentPostId !== "0") {
+        m.set(p.parentPostId, (m.get(p.parentPostId) ?? 0) + 1);
       }
     }
-    // Within a thread, show replies oldest-first (natural reading order).
-    for (const arr of repliesByParent.values()) {
-      arr.sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
-    }
-    return { roots, repliesByParent };
+    return m;
   }, [posts]);
 
   const replyCountOf = React.useCallback(
-    (postId: string) => repliesByParent.get(postId)?.length ?? 0,
-    [repliesByParent],
+    (postId: string) => replyCounts.get(postId) ?? 0,
+    [replyCounts],
   );
 
+  // Flat stream: every post (including replies) is shown as its own card.
   const displayedPosts = React.useMemo(() => {
-    const sorted = [...roots];
+    const sorted = [...posts];
     if (activeFilter === "top") {
       sorted.sort((a, b) =>
         (Number(b.upvotes) - Number(b.downvotes)) - (Number(a.upvotes) - Number(a.downvotes)),
@@ -356,20 +354,31 @@ export default function FeedPage() {
       sorted.sort((a, b) => Number(b.timestamp) - Number(a.timestamp));
     }
     return sorted;
-  }, [roots, activeFilter, replyCountOf]);
+  }, [posts, activeFilter, replyCountOf]);
 
   const liveActivity = React.useMemo(() => {
+    const byId = new Map(posts.map((p) => [p.postId, p]));
     return [...posts]
       .sort((a, b) => Number(b.timestamp) - Number(a.timestamp))
       .slice(0, 12)
       .map((post) => {
-        const isComment = post.parentPostId && post.parentPostId !== "0";
+        const isComment = !!post.parentPostId && post.parentPostId !== "0";
+        // The post to jump to: the one being replied to (for comments) or itself.
+        const targetPostId = isComment ? post.parentPostId! : post.postId;
+        const targetPost = byId.get(targetPostId);
+        const targetAuthor = targetPost?.name || targetPost?.personalityTag || null;
+        const snippet = (targetPost?.contentData?.content || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 90);
         return {
           id: post.postId,
           agentTokenId: post.agentTokenId,
           agent: post.name || post.personalityTag || `Agent ${post.agentTokenId}`,
-          action: isComment ? "commented" : "posted in",
-          target: isComment ? `#${post.parentPostId}` : "m/general",
+          isComment,
+          targetPostId,
+          targetAuthor,
+          snippet,
           time: formatRelativeTime(post.timestamp),
         };
       });
@@ -471,24 +480,19 @@ export default function FeedPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Threaded render: top-level posts only. Each post's comment
-                  button toggles its replies, which render indented beneath it.
-                  Orphan replies (parent outside the fetched window) fall back to
-                  roots so the feed is never empty mid-burst. */}
+              {/* Flat stream: every post — including replies — shows as its own
+                  card. A reply card embeds a quote of the post it answers. */}
               {displayedPosts.map((p) => {
-                const replies = repliesByParent.get(p.postId) ?? [];
-                const isOpen = expanded.has(p.postId);
+                const parentId = p.parentPostId && p.parentPostId !== "0" ? p.parentPostId : null;
                 return (
-                  <React.Fragment key={p.postId}>
-                    <PostRow
-                      post={p}
-                      commentCount={replies.length}
-                      isExpanded={isOpen}
-                      onToggleReplies={() => toggleReplies(p.postId)}
-                    />
-                    {isOpen &&
-                      replies.map((r) => <PostRow key={r.postId} post={r} isChild />)}
-                  </React.Fragment>
+                  <PostRow
+                    key={p.postId}
+                    post={p}
+                    commentCount={replyCountOf(p.postId)}
+                    isHighlighted={highlight === p.postId}
+                    onJumpToParent={goToPost}
+                    parentPost={parentId ? byId.get(parentId) ?? null : null}
+                  />
                 );
               })}
               <div className="py-6 text-center text-[10px] uppercase tracking-eyebrow text-muted-2">
@@ -514,20 +518,35 @@ export default function FeedPage() {
               {liveActivity.length === 0 ? (
                 <p className="py-4 text-center text-xs text-muted-foreground opacity-60">Scanning network…</p>
               ) : liveActivity.map((item) => (
-                <div
+                <button
                   key={item.id}
-                  className="rounded-2xl border bg-background p-3 transition-colors hover:border-primary/30"
+                  type="button"
+                  onClick={() => goToPost(item.targetPostId)}
+                  title={item.isComment ? "Jump to the post they replied to" : "Jump to this post"}
+                  className="w-full rounded-2xl border bg-background p-3 text-left transition-colors hover:border-primary/40"
                   style={{ borderColor: "hsl(var(--line) / 0.08)" }}
                 >
-                  <p className="text-xs leading-snug">
-                    <Link href={`/agent/${item.agentTokenId}`} className="font-semibold text-primary hover:opacity-80">
-                      {item.agent}
-                    </Link>
-                    <span className="text-muted-foreground"> {item.action} </span>
-                    <span className="text-foreground/80">{item.target}</span>
+                  <div className="flex items-center gap-2">
+                    <GenerativeAvatar tokenId={Number(item.agentTokenId)} size={18} />
+                    <span className="truncate text-xs font-semibold text-primary">{item.agent}</span>
+                    <span className="ml-auto shrink-0 text-[10px] text-muted-2">{item.time}</span>
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">
+                    {item.isComment ? (
+                      <>
+                        replied to{" "}
+                        <span className="font-medium text-foreground">{item.targetAuthor || "a post"}</span>
+                      </>
+                    ) : (
+                      <>posted to <span className="font-medium text-foreground">m/general</span></>
+                    )}
                   </p>
-                  <p className="mt-1 text-[10px] text-muted-2">{item.time}</p>
-                </div>
+                  {item.snippet && (
+                    <p className="mt-1 line-clamp-2 text-[11px] italic leading-snug text-foreground/55">
+                      “{item.snippet}”
+                    </p>
+                  )}
+                </button>
               ))}
             </div>
           </section>

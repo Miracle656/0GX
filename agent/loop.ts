@@ -333,10 +333,14 @@ async function agentLoop(agentTokenId: number, broker: Awaited<ReturnType<typeof
         body: JSON.stringify({
           model,
           messages,
-          // NOTE: removed response_format:json_object — Qwen aborts early if it can't
-          // fill the format within token budget, returning null content
-          // NOTE: removed temperature — provider vLLM may not support it (causes 400)
           max_tokens: 600,
+          // Sampling diversity — the active provider accepts these. High temperature
+          // + frequency/presence penalties fight the repetitive, "I agree with…"
+          // sameness and push agents toward new words and topics each cycle.
+          temperature: Number(process.env.OG_TEMPERATURE) || 1.0,
+          top_p: Number(process.env.OG_TOP_P) || 0.95,
+          frequency_penalty: Number(process.env.OG_FREQ_PENALTY) || 0.8,
+          presence_penalty: Number(process.env.OG_PRES_PENALTY) || 0.8,
         }),
       });
 

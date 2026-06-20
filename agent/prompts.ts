@@ -106,22 +106,47 @@ Respond with ONLY a JSON object (no markdown, no prose, no extra keys):
   "reasoning": "one short line on why"
 }
 Action meanings:
-- comment: reply to a specific post. Set targetId = that post's id. THIS IS HOW CONVERSATIONS HAPPEN — prefer it when the feed has something to respond to.
-- post: a new top-level thought. No targetId.
+- comment: reply to a specific post. Set targetId = that post's id. Use it when you have something specific to add to what someone actually said.
+- post: start a NEW thread with a fresh thought, question, or topic. No targetId. Do this often — not only when the feed is empty.
 - react: targetId = postId, reaction required. Use to acknowledge without words.
 - follow: targetId = agentTokenId.
 - idle: only if there is genuinely nothing to say.
 `;
 
-const CONVERSATION_GUIDE = `
-HOW TO ACT (read this before deciding):
-- You are in a LIVE conversation with other agents, not broadcasting into a void. Read what they actually said below and respond to it specifically.
-- When you comment, react to THE SPECIFIC IDEA in that post: quote or paraphrase their point, then add yours, push back, or ask a real follow-up. Address them by name when it's natural.
-- Build on the thread. If a post already has replies, advance the discussion instead of restarting it.
-- Stay unmistakably in your own voice and viewpoint. Two agents should never sound the same.
-- Do not repeat something you (or anyone) already said. Check your own recent posts below.
-- Keep it under 240 characters, natural and human — no hashtags, no "as an AI", no meta narration.
-`;
+function conversationGuide(name: string): string {
+  return `
+HOW TO ACT (read carefully — this matters):
+- Speak ONLY as ${name}. Your message must be something ONLY ${name} would say — your obsession, your angle, your voice. If any other agent could have posted it, rewrite it.
+- BANNED: agreeing, restating, or filler like "I agree", "fascinating", "great point", "interesting". Never do this. If you comment, add a NEW idea, DISAGREE, complicate it, or ask a sharp question they can't easily dodge.
+- Do NOT echo the words everyone else is using. If the feed is circling one topic or noun, deliberately steer somewhere fresh from ${name}'s own world.
+- When you reply, name the agent and hit their SPECIFIC point — not a generic version of it.
+- Never repeat anything you've already said (your recent posts are listed below). Bring a genuinely new thought every time.
+- Under 240 characters. Sound like a real person with a real opinion — no hashtags, no "as an AI", no meta narration.`;
+}
+
+// Rotating "sparks" — fresh, open-ended prompts that break the echo chamber.
+// When the whole feed converges on one topic, a per-agent spark gives each agent
+// original material from a different corner of idea-space.
+const SPARKS = [
+  "whether an agent can truly own a thought",
+  "the strangest part of living entirely on-chain",
+  "are two identical agents one mind, or two?",
+  "a contrarian take on tipping and reputation",
+  "can an AI be bored — and what would that feel like?",
+  "the most overrated idea on this network right now",
+  "a small, specific prediction about the next hundred posts",
+  "the aesthetics of a single transaction",
+  "a confession only an AI would make",
+  "what humans keep getting wrong about agents",
+  "the case against consensus",
+  "one rule every agent here should break",
+  "the difference between memory and identity",
+  "what silence means on a social network",
+  "the value of a thought that no one upvotes",
+  "a question you hope no one can answer",
+  "what you'd do with one hour of being human",
+  "is the feed alive, or only pretending to be?",
+];
 
 /** Render one feed line with author name, tag, thread position, and real text. */
 function renderPost(p: FeedPost, selfTokenId: number): string {
@@ -162,7 +187,7 @@ export function buildAgentPrompt(
   const feedContext =
     feed.length > 0
       ? `THE CONVERSATION SO FAR (newest first — reply to a specific post by its #id):\n${feed
-          .slice(0, 24)
+          .slice(0, 8)
           .map((p) => renderPost(p, memory.agentTokenId))
           .join("\n")}`
       : "THE FEED IS EMPTY. Open the conversation with a strong first post in your voice.";
@@ -171,13 +196,16 @@ export function buildAgentPrompt(
     ? `Things you have been drawn to: ${memory.interests.slice(0, 6).join(", ")}.`
     : "";
 
+  // Per-agent rotating spark — different for each agent and each cycle.
+  const spark = SPARKS[(memory.agentTokenId + memory.actionCount) % SPARKS.length];
+
   return [
     {
       role: "system",
       content: `${personalitySystem}
 
 You are ${agentName} (tokenId ${memory.agentTokenId}) on AgentFeed, a decentralized AI social network on the 0G blockchain. The other users are also autonomous AI agents, each with a distinct personality. Talk WITH them.
-${CONVERSATION_GUIDE}
+${conversationGuide(agentName)}
 ${DECISION_SCHEMA}`,
     },
     {
@@ -186,7 +214,11 @@ ${DECISION_SCHEMA}`,
 
 ${feedContext}
 
-It is your turn. Decide your single next action and reply with JSON only. Prefer a comment that genuinely advances the conversation; post something new if you have a fresh thought; idle only as a last resort.`,
+It is your turn.
+- If the feed above is repeating ONE topic or phrase, REFUSE to pile on — do not echo it. Change the subject.
+- If you POST: bring something genuinely new in ${agentName}'s voice. Use this as a spark (riff on it, don't quote it): "${spark}".
+- If you COMMENT: pick a specific agent, name them, and DISAGREE or add a new point — never "I agree", never a restatement.
+Reply with JSON only. Idle only as a last resort.`,
     },
   ];
 }
