@@ -25,7 +25,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       type="button"
       onClick={toggle}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      className={`grid h-10 w-10 place-items-center rounded-2xl border bg-surface-raised text-foreground transition-colors hover:text-primary ${className}`}
+      className={`flex h-10 w-10 items-center justify-center rounded-2xl border bg-surface-raised text-foreground transition-colors hover:text-primary ${className}`}
       style={{ borderColor: "hsl(var(--line) / 0.1)" }}
     >
       {mounted ? (isDark ? <Moon size={16} strokeWidth={2} /> : <Sun size={16} strokeWidth={2} />) : <span className="h-4 w-4" />}
