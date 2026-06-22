@@ -8,20 +8,20 @@ import {
 } from "@/lib/world";
 
 // ── Grid constants ─────────────────────────────────────────────────────────────
-const TW = 80;           // isometric tile width
-const TH = 40;           // isometric tile height
-const TE = 7;            // tile edge (side face height)
-const TICK_MS = 4000;
-const MOVE_MS = 1600;
+const TW = 80;
+const TH = 40;
+const TE = 7;
+const TICK_MS   = 4000;
+const MOVE_MS   = 1600;
 const PARTICLE_FRAMES = 80;
 
-// ── Biome palette (3 faces per biome) ────────────────────────────────────────
+// ── Biome palette ─────────────────────────────────────────────────────────────
 const B_TOP:    Record<string, string> = { forest:"#66bb6a", highlands:"#b0bec5", desert:"#ffd166", coast:"#4fc3f7", tundra:"#f8f9fa" };
 const B_LEFT:   Record<string, string> = { forest:"#43a047", highlands:"#78909c", desert:"#f9a825", coast:"#039be5", tundra:"#eceff1" };
 const B_RIGHT:  Record<string, string> = { forest:"#2e7d32", highlands:"#546e7a", desert:"#e65100", coast:"#0277bd", tundra:"#cfd8dc" };
 const B_STROKE: Record<string, string> = { forest:"#1b5e20", highlands:"#37474f", desert:"#bf360c", coast:"#01579b", tundra:"#b0bec5" };
 
-// ── Personality colours (CSS hex strings) ────────────────────────────────────
+// ── Personality colours ───────────────────────────────────────────────────────
 const TAG_CSS: Record<string, string> = {
   philosopher:"#9200e1", builder:"#f97316", explorer:"#06b6d4",
   teacher:"#22c55e", strategist:"#ef4444", logician:"#a855f7", enigma:"#ec4899",
@@ -33,6 +33,7 @@ interface FloatParticle { x: number; y: number; text: string; alpha: number; dy:
 interface AnimatedAgent extends WorldAgent {
   fromQ: number; fromR: number; toQ: number; toR: number;
   moveProgress: number;
+  arrivalFrame: number;
 }
 interface AgentProfile {
   tokenId: number; name: string; personalityTag: string;
@@ -42,16 +43,56 @@ interface AgentProfile {
 }
 interface SelectedEntity { type: "tile" | "agent"; tile?: WorldTile; agent?: WorldAgent; }
 
-// ── Math ──────────────────────────────────────────────────────────────────────
+// ── Math helpers ──────────────────────────────────────────────────────────────
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 function easeIO(t: number) { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; }
 
-// Convert grid (col, row) to world-space pixels (canvas transform handles pan/zoom)
+// Lighten a CSS hex color by `amount` (0–1)
+function lightenHex(hex: string, amount: number): string {
+  const n = parseInt(hex.replace("#", ""), 16);
+  const r = Math.min(255, ((n >> 16) & 0xff) + Math.round(255 * amount));
+  const g = Math.min(255, ((n >>  8) & 0xff) + Math.round(255 * amount));
+  const b = Math.min(255, ( n        & 0xff) + Math.round(255 * amount));
+  return `#${r.toString(16).padStart(2,"0")}${g.toString(16).padStart(2,"0")}${b.toString(16).padStart(2,"0")}`;
+}
+
+// ── Rotation helpers ──────────────────────────────────────────────────────────
+const N_GRID = WORLD_COLS - 1; // 24
+
+function applyRotation(q: number, r: number, rot: number): { col: number; row: number } {
+  switch (rot) {
+    case 1: return { col: N_GRID - r, row: q };
+    case 2: return { col: N_GRID - q, row: N_GRID - r };
+    case 3: return { col: r,          row: N_GRID - q };
+    default: return { col: q, row: r };
+  }
+}
+
+function displayToWorld(col: number, row: number, rot: number): { q: number; r: number } {
+  switch (rot) {
+    case 1: return { q: row,          r: N_GRID - col };
+    case 2: return { q: N_GRID - col, r: N_GRID - row };
+    case 3: return { q: N_GRID - row, r: col };
+    default: return { q: col, r: row };
+  }
+}
+
+// ── Isometric projection ──────────────────────────────────────────────────────
 function iso(col: number, row: number) {
   return { x: (col - row) * (TW / 2), y: (col + row) * (TH / 2) };
 }
 
-// Convert screen mouse coords → grid cell
+function isoRotated(q: number, r: number, rot: number) {
+  const { col, row } = applyRotation(q, r, rot);
+  return iso(col, row);
+}
+
+function isoRotatedLerp(q: number, r: number, prev: number, next: number, t: number) {
+  const from = isoRotated(q, r, prev);
+  const to   = isoRotated(q, r, next);
+  return { x: lerp(from.x, to.x, easeIO(t)), y: lerp(from.y, to.y, easeIO(t)) };
+}
+
 function mouseToGrid(
   mx: number, my: number,
   panX: number, panY: number, zoom: number,
@@ -59,18 +100,19 @@ function mouseToGrid(
 ): { col: number; row: number } {
   const lx = (mx - cx - panX) / zoom;
   const ly = (my - cy - panY) / zoom;
-  const col = Math.round((lx / (TW / 2) + ly / (TH / 2)) / 2);
-  const row = Math.round((ly / (TH / 2) - lx / (TW / 2)) / 2);
-  return { col, row };
+  return {
+    col: Math.round((lx / (TW / 2) + ly / (TH / 2)) / 2),
+    row: Math.round((ly / (TH / 2) - lx / (TW / 2)) / 2),
+  };
 }
 
-// ── Canvas drawing ─────────────────────────────────────────────────────────────
+// ── Canvas drawing helpers ─────────────────────────────────────────────────────
 
 function diamond(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
   ctx.beginPath();
-  ctx.moveTo(x, y - h / 2);
+  ctx.moveTo(x,         y - h / 2);
   ctx.lineTo(x + w / 2, y);
-  ctx.lineTo(x, y + h / 2);
+  ctx.lineTo(x,         y + h / 2);
   ctx.lineTo(x - w / 2, y);
   ctx.closePath();
 }
@@ -83,6 +125,7 @@ function drawTile(
   selected: boolean,
   tick: number,
   tile: WorldTile,
+  frame: number,
 ) {
   const top  = B_TOP[biome]   ?? "#ccc";
   const left = B_LEFT[biome]  ?? "#aaa";
@@ -92,66 +135,78 @@ function drawTile(
 
   // SE face (right)
   ctx.beginPath();
-  ctx.moveTo(x, y + hh);
+  ctx.moveTo(x,      y + hh);
   ctx.lineTo(x + hw, y);
   ctx.lineTo(x + hw, y - TE);
-  ctx.lineTo(x, y + hh - TE);
+  ctx.lineTo(x,      y + hh - TE);
   ctx.closePath();
   ctx.fillStyle = rght; ctx.fill();
 
   // SW face (left)
   ctx.beginPath();
-  ctx.moveTo(x, y + hh);
+  ctx.moveTo(x,      y + hh);
   ctx.lineTo(x - hw, y);
   ctx.lineTo(x - hw, y - TE);
-  ctx.lineTo(x, y + hh - TE);
+  ctx.lineTo(x,      y + hh - TE);
   ctx.closePath();
   ctx.fillStyle = left; ctx.fill();
 
-  // Top face
+  // Top face — gradient
   diamond(ctx, x, y - TE, TW, TH);
-  ctx.fillStyle = top; ctx.fill();
+  const grad = ctx.createLinearGradient(x - hw, y - TE - hh, x + hw / 2, y - TE + hh / 2);
+  grad.addColorStop(0, lightenHex(top, 0.22));
+  grad.addColorStop(1, top);
+  ctx.fillStyle = grad;
+  ctx.fill();
   ctx.strokeStyle = (hovered || selected) ? "#fff" : strk;
-  ctx.lineWidth = hovered || selected ? 1.5 : 0.4;
+  ctx.lineWidth   = (hovered || selected) ? 1.5   : 0.4;
   ctx.stroke();
 
-  // Hover/select highlight
+  // Sheen stripe — subtle diagonal white band
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle   = "#fff";
+  diamond(ctx, x, y - TE, TW, TH);
+  ctx.clip();
+  ctx.fillRect(x - 6, y - TE - TH, 9, TH * 3);
+  ctx.restore();
+
+  // Hover / select overlay
   if (hovered || selected) {
     diamond(ctx, x, y - TE, TW, TH);
     ctx.fillStyle = selected ? "rgba(146,0,225,0.22)" : "rgba(255,255,255,0.22)";
     ctx.fill();
   }
 
-  // Tile decorations
-  drawDecoration(ctx, x, y - TE, biome, tile, tick);
+  drawDecoration(ctx, x, y - TE, biome, tile, tick, frame);
 }
 
 function drawDecoration(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number,   // y = top point of tile surface
+  x: number, y: number,
   biome: string,
   tile: WorldTile,
   tick: number,
+  frame: number,
 ) {
   const seed = tile.q * 31 + tile.r * 17;
   switch (biome) {
     case "forest": {
-      // 2–3 small trees
       const count = 2 + (seed % 2);
       for (let i = 0; i < count; i++) {
         const tx = x + ((i * 14) - (count - 1) * 7) + (seed % 5) - 2;
         const ty = y + 6 + (i % 2) * 4;
-        drawTree(ctx, tx, ty, 10 + (seed % 4));
+        drawTree(ctx, tx, ty, 10 + (seed % 4), frame);
       }
       break;
     }
     case "coast": {
-      // Animated ripples
+      // Ripples
       const phase = (tick * 0.15 + tile.q * 0.5 + tile.r * 0.4) % (Math.PI * 2);
       ctx.save();
       ctx.strokeStyle = "rgba(255,255,255,0.5)";
-      ctx.lineWidth = 1.2;
-      ctx.lineCap = "round";
+      ctx.lineWidth   = 1.2;
+      ctx.lineCap     = "round";
       for (let i = 0; i < 2; i++) {
         const wx = x - 14 + i * 14;
         const wy = y + 8 + Math.sin(phase + i * 1.2) * 2;
@@ -160,10 +215,23 @@ function drawDecoration(
         ctx.stroke();
       }
       ctx.restore();
+      // Sparkles
+      for (let i = 0; i < 4; i++) {
+        const sr    = seededRandom(tile.q * 77 + tile.r * 31 + i * 13);
+        const alpha = Math.max(0, Math.sin((frame * 0.08 + sr * Math.PI * 2) % (Math.PI * 2)));
+        if (alpha > 0.5) {
+          ctx.save();
+          ctx.globalAlpha = alpha * 0.7;
+          ctx.fillStyle   = "#fff";
+          ctx.beginPath();
+          ctx.arc(x + (sr - 0.5) * TW * 0.6, y + sr * TH * 0.5, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
       break;
     }
     case "desert": {
-      // Cactus
       ctx.save();
       ctx.strokeStyle = "#33691e"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
       ctx.beginPath(); ctx.moveTo(x, y + 18); ctx.lineTo(x, y + 4); ctx.stroke();
@@ -173,7 +241,6 @@ function drawDecoration(
       break;
     }
     case "tundra": {
-      // Snow crystals
       ctx.save();
       ctx.strokeStyle = "rgba(144,202,249,0.8)"; ctx.lineWidth = 0.8;
       for (let i = 0; i < 3; i++) {
@@ -191,7 +258,6 @@ function drawDecoration(
       break;
     }
     case "highlands": {
-      // Rocks
       ctx.save();
       for (let i = 0; i < 3; i++) {
         const rx = x + (i - 1) * 13 + (seed % 3) - 1;
@@ -208,23 +274,40 @@ function drawDecoration(
   }
 }
 
-function drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
+function drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, frame: number) {
+  const sway = Math.sin(frame * 0.04 + x * 0.01) * 2.5;
   // Trunk
   ctx.fillStyle = "#795548";
   ctx.fillRect(x - 1.5, y, 3, size * 0.55);
-  // Layered canopy
+  // Layered canopy with sway on upper layers
   const layers = 3;
   for (let i = 0; i < layers; i++) {
-    const r = size * (0.55 - i * 0.12);
+    const r  = size * (0.55 - i * 0.12);
     const ly = y - size * 0.1 - i * size * 0.22;
+    const sw = sway * (1 - i * 0.25); // top layer sways most
     ctx.fillStyle = i === 0 ? "#2e7d32" : i === 1 ? "#388e3c" : "#43a047";
     ctx.beginPath();
-    ctx.moveTo(x, ly - r * 1.1);
-    ctx.lineTo(x - r, ly + r * 0.3);
-    ctx.lineTo(x + r, ly + r * 0.3);
+    ctx.moveTo(x + sw, ly - r * 1.1);
+    ctx.lineTo(x - r,  ly + r * 0.3);
+    ctx.lineTo(x + r,  ly + r * 0.3);
     ctx.closePath();
     ctx.fill();
   }
+}
+
+function drawBuildingShadow(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  type: BuildingType,
+) {
+  const bh = type === "house" ? 28 : type === "hut" ? 20 : 12;
+  ctx.save();
+  ctx.globalAlpha = 0.13;
+  ctx.fillStyle   = "#2c1a0e";
+  ctx.beginPath();
+  ctx.ellipse(x + 10 + bh * 0.18, y + TH / 2 - TE + 4, TW * 0.42, TH * 0.22, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawBuilding(
@@ -239,103 +322,76 @@ function drawBuilding(
   ctx.globalAlpha = alpha;
 
   const hw = TW / 2, hh = TH / 2;
-  const base = y + hh - TE; // bottom front of tile top surface
+  const base = y + hh - TE;
 
   switch (type) {
     case "hut": {
       const BH = 20, RH = 14;
-      // Right wall
       ctx.fillStyle = "#a1887f";
       ctx.beginPath(); ctx.moveTo(x, base); ctx.lineTo(x + hw, base - hh); ctx.lineTo(x + hw, base - hh - BH); ctx.lineTo(x, base - BH); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#795548"; ctx.lineWidth = 0.5; ctx.stroke();
-      // Left wall
       ctx.fillStyle = "#8d6e63";
       ctx.beginPath(); ctx.moveTo(x, base); ctx.lineTo(x - hw, base - hh); ctx.lineTo(x - hw, base - hh - BH); ctx.lineTo(x, base - BH); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#795548"; ctx.lineWidth = 0.5; ctx.stroke();
-      // Roof top face
       diamond(ctx, x, base - BH - TH / 2, TW * 0.9, TH * 0.9);
       ctx.fillStyle = "#bcaaa4"; ctx.fill(); ctx.strokeStyle = "#795548"; ctx.lineWidth = 0.4; ctx.stroke();
-      // Pyramid roof (right face)
       ctx.fillStyle = "#d32f2f";
-      ctx.beginPath(); ctx.moveTo(x + hw * 0.9, base - BH - TH * 0.05); ctx.lineTo(x, base - BH - hh * 0.9); ctx.lineTo(x, base - BH - hh * 0.9 - RH); ctx.lineTo(x, base - BH - hh * 0.9); ctx.closePath();
       ctx.beginPath(); ctx.moveTo(x + hw * 0.9, base - BH); ctx.lineTo(x, base - BH - hh * 0.9 + 3); ctx.lineTo(x, base - BH - hh * 0.9 - RH); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#b71c1c"; ctx.lineWidth = 0.4; ctx.stroke();
-      // Pyramid roof (left face)
       ctx.fillStyle = "#ef5350";
       ctx.beginPath(); ctx.moveTo(x - hw * 0.9, base - BH); ctx.lineTo(x, base - BH - hh * 0.9 + 3); ctx.lineTo(x, base - BH - hh * 0.9 - RH); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#b71c1c"; ctx.lineWidth = 0.4; ctx.stroke();
       break;
     }
-
     case "house": {
       const BH = 28, RH = 16;
-      // Right wall (cream/white)
       ctx.fillStyle = "#f5f5f5";
       ctx.beginPath(); ctx.moveTo(x, base); ctx.lineTo(x + hw, base - hh); ctx.lineTo(x + hw, base - hh - BH); ctx.lineTo(x, base - BH); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#bdbdbd"; ctx.lineWidth = 0.5; ctx.stroke();
-      // Window right
       ctx.fillStyle = "#b3e5fc"; ctx.fillRect(x + 12, base - hh - 8, 10, 8);
       ctx.strokeStyle = "#90caf9"; ctx.lineWidth = 0.5; ctx.strokeRect(x + 12, base - hh - 8, 10, 8);
-      // Left wall
       ctx.fillStyle = "#eeeeee";
       ctx.beginPath(); ctx.moveTo(x, base); ctx.lineTo(x - hw, base - hh); ctx.lineTo(x - hw, base - hh - BH); ctx.lineTo(x, base - BH); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#bdbdbd"; ctx.lineWidth = 0.5; ctx.stroke();
-      // Window left
       ctx.fillStyle = "#b3e5fc"; ctx.fillRect(x - 22, base - hh - 8, 10, 8);
       ctx.strokeStyle = "#90caf9"; ctx.lineWidth = 0.5; ctx.strokeRect(x - 22, base - hh - 8, 10, 8);
-      // Roof top face
       diamond(ctx, x, base - BH - TH / 2, TW * 0.95, TH * 0.95);
       ctx.fillStyle = "#f5f5f5"; ctx.fill(); ctx.strokeStyle = "#bdbdbd"; ctx.lineWidth = 0.4; ctx.stroke();
-      // Hip roof front-right
       ctx.fillStyle = "#c62828";
       ctx.beginPath(); ctx.moveTo(x, base - BH - hh * 0.95); ctx.lineTo(x + hw * 0.95, base - BH); ctx.lineTo(x + hw * 0.45, base - BH - RH); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#b71c1c"; ctx.lineWidth = 0.4; ctx.stroke();
-      // Hip roof front-left
       ctx.fillStyle = "#e53935";
       ctx.beginPath(); ctx.moveTo(x, base - BH - hh * 0.95); ctx.lineTo(x - hw * 0.95, base - BH); ctx.lineTo(x - hw * 0.45, base - BH - RH); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#b71c1c"; ctx.lineWidth = 0.4; ctx.stroke();
-      // Door
-      ctx.fillStyle = "#6d4c41";
-      ctx.fillRect(x - 5, base - 14, 10, 14);
+      ctx.fillStyle = "#6d4c41"; ctx.fillRect(x - 5, base - 14, 10, 14);
       ctx.fillStyle = "#ffd54f"; ctx.beginPath(); ctx.arc(x + 4, base - 7, 1.5, 0, Math.PI * 2); ctx.fill();
       break;
     }
-
     case "farm": {
       const BH = 12;
-      // Right wall (barn)
       ctx.fillStyle = "#c8e6c9";
       ctx.beginPath(); ctx.moveTo(x, base); ctx.lineTo(x + hw, base - hh); ctx.lineTo(x + hw, base - hh - BH); ctx.lineTo(x, base - BH); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#a5d6a7"; ctx.lineWidth = 0.5; ctx.stroke();
-      // Left wall
       ctx.fillStyle = "#a5d6a7";
       ctx.beginPath(); ctx.moveTo(x, base); ctx.lineTo(x - hw, base - hh); ctx.lineTo(x - hw, base - hh - BH); ctx.lineTo(x, base - BH); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#a5d6a7"; ctx.lineWidth = 0.5; ctx.stroke();
-      // Roof
       diamond(ctx, x, base - BH - TH / 2, TW, TH);
       ctx.fillStyle = "#dcedc8"; ctx.fill(); ctx.strokeStyle = "#aed581"; ctx.lineWidth = 0.4; ctx.stroke();
-      // Silo
       ctx.fillStyle = "#e0e0e0"; ctx.strokeStyle = "#bdbdbd"; ctx.lineWidth = 0.5;
       ctx.beginPath(); ctx.arc(x + hw - 12, base - hh - 5, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = "#ef5350";
       ctx.beginPath(); ctx.moveTo(x + hw - 19, base - hh - 5); ctx.lineTo(x + hw - 5, base - hh - 5); ctx.lineTo(x + hw - 12, base - hh - 22); ctx.closePath(); ctx.fill();
-      // Fence dots
       ctx.strokeStyle = "#795548"; ctx.lineWidth = 1.5; ctx.lineCap = "round";
       for (let i = -3; i <= 3; i++) {
         ctx.beginPath(); ctx.moveTo(x + i * 7, base + hh - 3); ctx.lineTo(x + i * 7, base + hh - 9); ctx.stroke();
       }
       break;
     }
-
-    case "road":
-      // Drawn at tile pass level
-      break;
+    case "road": break;
   }
-
   ctx.restore();
 }
 
-// Character sprite — Little Big City style cute person
 function drawCharacter(
   ctx: CanvasRenderingContext2D,
   x: number, y: number,
@@ -350,16 +406,20 @@ function drawCharacter(
   const bob    = moving ? Math.sin(frame * 0.28) * 1.8 : 0;
   const swing  = moving ? Math.sin(frame * 0.28) * 4   : 0;
 
-  const by = y; // feet at y
+  // Arrival bounce
+  const bounceAge = frame - (ag.arrivalFrame ?? -999);
+  const bounce    = bounceAge >= 0 && bounceAge < 12 ? Math.sin((bounceAge / 12) * Math.PI) * 4 : 0;
+
+  const by = y - bounce;
 
   // Selection indicator
   if (isSelected) {
     ctx.save();
     ctx.beginPath();
     ctx.ellipse(x, by, 14, 6, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.shadowColor = color; ctx.shadowBlur = 10;
+    ctx.strokeStyle  = color;
+    ctx.lineWidth    = 2;
+    ctx.shadowColor  = color; ctx.shadowBlur = 10;
     ctx.stroke();
     ctx.restore();
   }
@@ -371,59 +431,45 @@ function drawCharacter(
   ctx.fillStyle = "#000"; ctx.fill();
   ctx.restore();
 
-  // Shoes (dark)
+  // Shoes
   ctx.fillStyle = "#3e2723";
-  // Left shoe
   ctx.beginPath(); ctx.ellipse(x - 3, by - 1 + bob, 4, 2.2, 0.3, 0, Math.PI * 2); ctx.fill();
-  // Right shoe
   ctx.beginPath(); ctx.ellipse(x + 3, by - 1 + bob, 4, 2.2, -0.3, 0, Math.PI * 2); ctx.fill();
 
-  // Legs (pants)
+  // Legs
   ctx.fillStyle = "#37474f";
-  // Left leg
   ctx.beginPath();
-  ctx.moveTo(x - 4.5, by - 1 + bob);
-  ctx.lineTo(x - 2,   by - 8 + bob + swing);
-  ctx.lineTo(x + 0.5, by - 8 + bob + swing);
-  ctx.lineTo(x - 1.5, by - 1 + bob);
-  ctx.closePath(); ctx.fill();
-  // Right leg
+  ctx.moveTo(x - 4.5, by - 1 + bob); ctx.lineTo(x - 2, by - 8 + bob + swing);
+  ctx.lineTo(x + 0.5, by - 8 + bob + swing); ctx.lineTo(x - 1.5, by - 1 + bob); ctx.closePath(); ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(x + 4.5, by - 1 + bob);
-  ctx.lineTo(x + 2,   by - 8 + bob - swing);
-  ctx.lineTo(x - 0.5, by - 8 + bob - swing);
-  ctx.lineTo(x + 1.5, by - 1 + bob);
-  ctx.closePath(); ctx.fill();
+  ctx.moveTo(x + 4.5, by - 1 + bob); ctx.lineTo(x + 2, by - 8 + bob - swing);
+  ctx.lineTo(x - 0.5, by - 8 + bob - swing); ctx.lineTo(x + 1.5, by - 1 + bob); ctx.closePath(); ctx.fill();
 
-  // Belt line
+  // Belt
   ctx.fillStyle = "#212121";
   ctx.fillRect(x - 4.5, by - 9 + bob, 9, 1.5);
 
-  // Body / shirt (white outline for readability on all tile types)
+  // Body
   ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.8;
-  ctx.fillStyle = color;
+  ctx.fillStyle   = color;
   ctx.beginPath();
-  ctx.moveTo(x - 5.5, by - 9 + bob);
-  ctx.lineTo(x - 5.5, by - 19 + bob);
+  ctx.moveTo(x - 5.5, by - 9  + bob); ctx.lineTo(x - 5.5, by - 19 + bob);
   ctx.quadraticCurveTo(x - 5.5, by - 21 + bob, x - 3.5, by - 21 + bob);
   ctx.lineTo(x + 3.5, by - 21 + bob);
   ctx.quadraticCurveTo(x + 5.5, by - 21 + bob, x + 5.5, by - 19 + bob);
   ctx.lineTo(x + 5.5, by - 9 + bob);
-  ctx.closePath();
-  ctx.fill(); ctx.stroke();
+  ctx.closePath(); ctx.fill(); ctx.stroke();
 
-  // Shirt pocket / icon
+  // Pocket
   ctx.fillStyle = "rgba(255,255,255,0.3)";
   ctx.beginPath(); ctx.roundRect(x - 3, by - 17 + bob, 4, 3.5, 0.5); ctx.fill();
 
   // Arms
   ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.lineCap = "round";
-  // Left arm (swings opposite to left leg = same as swing)
   ctx.beginPath();
   ctx.moveTo(x - 5.5, by - 18 + bob);
   ctx.quadraticCurveTo(x - 9, by - 15 + bob, x - 7, by - 11 + bob + swing * 0.6);
   ctx.stroke();
-  // Right arm
   ctx.beginPath();
   ctx.moveTo(x + 5.5, by - 18 + bob);
   ctx.quadraticCurveTo(x + 9, by - 15 + bob, x + 7, by - 11 + bob - swing * 0.6);
@@ -433,12 +479,12 @@ function drawCharacter(
   ctx.fillStyle = "#ffcc80";
   ctx.fillRect(x - 2, by - 24 + bob, 4, 4);
 
-  // Head — white outline
+  // Head
   ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.8;
-  ctx.fillStyle = "#ffcc80";
+  ctx.fillStyle   = "#ffcc80";
   ctx.beginPath(); ctx.arc(x, by - 28 + bob, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
-  // Hair (personality color — top arc)
+  // Hair
   ctx.fillStyle = color;
   ctx.beginPath(); ctx.arc(x, by - 28 + bob, 7, -Math.PI * 1.1, 0.1); ctx.closePath(); ctx.fill();
 
@@ -446,27 +492,22 @@ function drawCharacter(
   ctx.fillStyle = "#1a1a1a";
   ctx.beginPath(); ctx.arc(x - 2.5, by - 29 + bob, 1.2, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(x + 2.5, by - 29 + bob, 1.2, 0, Math.PI * 2); ctx.fill();
-  // Eye shine
   ctx.fillStyle = "#fff";
-  ctx.beginPath(); ctx.arc(x - 2, by - 29.5 + bob, 0.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + 3, by - 29.5 + bob, 0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x - 2,   by - 29.5 + bob, 0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 3,   by - 29.5 + bob, 0.5, 0, Math.PI * 2); ctx.fill();
 
   // Smile
   ctx.strokeStyle = "#c97030"; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(x, by - 27 + bob, 3, 0.25, Math.PI - 0.25); ctx.stroke();
 
-  // Name tag above selected character
+  // Name tag (selected only)
   if (isSelected) {
     const lw = agent.name.length * 5.5 + 12;
     ctx.save();
     ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.roundRect(x - lw / 2, by - 44 + bob, lw, 13, 5);
-    ctx.fill();
-    // Pointer
+    ctx.beginPath(); ctx.roundRect(x - lw / 2, by - 44 + bob, lw, 13, 5); ctx.fill();
     ctx.beginPath(); ctx.moveTo(x - 5, by - 31 + bob); ctx.lineTo(x + 5, by - 31 + bob); ctx.lineTo(x, by - 24 + bob); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 7.5px sans-serif";
+    ctx.fillStyle = "#fff"; ctx.font = "bold 7.5px sans-serif";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(agent.name, x, by - 37.5 + bob);
     ctx.restore();
@@ -477,20 +518,25 @@ function drawCharacter(
 export default function VersePage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef  = useRef<{
-    tiles:       WorldTile[];
-    agents:      AnimatedAgent[];
-    buildings:   Building[];
-    particles:   FloatParticle[];
-    tick:        number;
-    pan:         { x: number; y: number };
-    zoom:        number;
-    dragging:    boolean;
-    dragStart:   { x: number; y: number };
-    selected:    SelectedEntity | null;
-    hoveredCell: { q: number; r: number } | null;
-    rafId:       number;
-    frame:       number;
-    ready:       boolean;
+    tiles:        WorldTile[];
+    agents:       AnimatedAgent[];
+    buildings:    Building[];
+    particles:    FloatParticle[];
+    tick:         number;
+    pan:          { x: number; y: number };
+    zoom:         number;
+    dragging:     boolean;
+    dragStart:    { x: number; y: number };
+    selected:     SelectedEntity | null;
+    hoveredCell:  { q: number; r: number } | null;
+    rafId:        number;
+    frame:        number;
+    ready:        boolean;
+    rotation:     number;
+    prevRotation: number;
+    rotProgress:  number;
+    velocity:     { x: number; y: number };
+    lastMouse:    { x: number; y: number };
   }>({
     tiles: [], agents: [], buildings: [], particles: [],
     tick: 0,
@@ -498,6 +544,8 @@ export default function VersePage() {
     dragging: false, dragStart: { x: 0, y: 0 },
     selected: null, hoveredCell: null,
     rafId: 0, frame: 0, ready: false,
+    rotation: 0, prevRotation: 0, rotProgress: 1,
+    velocity: { x: 0, y: 0 }, lastMouse: { x: 0, y: 0 },
   });
 
   const [loading,       setLoading]       = useState(true);
@@ -505,10 +553,21 @@ export default function VersePage() {
   const [selected,      setSelected]      = useState<SelectedEntity | null>(null);
   const [agentCount,    setAgentCount]    = useState(0);
   const [buildingCount, setBuildingCount] = useState(0);
+  const [rotation,      setRotation]      = useState(0);
 
   const center = useCallback(() => {
     const c = canvasRef.current;
     return { cx: c ? c.width / 2 : 400, cy: c ? c.height / 4 : 150 };
+  }, []);
+
+  // ── Rotation ───────────────────────────────────────────────────────────────
+  const rotateView = useCallback((dir: 1 | -1) => {
+    const s = stateRef.current;
+    if (s.rotProgress < 0.85) return;
+    s.prevRotation = s.rotation;
+    s.rotation     = ((s.rotation + dir + 4) % 4) as 0 | 1 | 2 | 3;
+    s.rotProgress  = 0;
+    setRotation(s.rotation);
   }, []);
 
   // ── Particles ─────────────────────────────────────────────────────────────
@@ -537,20 +596,28 @@ export default function VersePage() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const { tiles, agents, buildings, particles, pan, zoom, selected: sel, hoveredCell, tick, frame } = stateRef.current;
+    const {
+      tiles, agents, buildings, particles,
+      pan, zoom, selected: sel, hoveredCell, tick, frame,
+      rotation: rot, prevRotation, rotProgress,
+    } = stateRef.current;
     const { cx, cy } = center();
+    const isT      = rotProgress < 1;
+    const maxDepth = WORLD_COLS + WORLD_ROWS - 2;
 
-    // Sky gradient background
+    // Sky gradient
     const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    sky.addColorStop(0, "#7ec8e3"); sky.addColorStop(0.45, "#b8e4f7");
-    sky.addColorStop(0.9, "#d4edb5"); sky.addColorStop(1, "#c8e6c9");
+    sky.addColorStop(0,    "#7ec8e3");
+    sky.addColorStop(0.45, "#b8e4f7");
+    sky.addColorStop(0.9,  "#d4edb5");
+    sky.addColorStop(1,    "#c8e6c9");
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Floating clouds (very subtle)
+    // Drifting clouds
     ctx.save();
     ctx.globalAlpha = 0.25;
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle   = "#fff";
     const cOffset = (tick * 0.3 + frame * 0.01) % (canvas.width + 200);
     for (let i = 0; i < 4; i++) {
       const cx2 = ((i * 280 + cOffset) % (canvas.width + 200)) - 100;
@@ -563,12 +630,12 @@ export default function VersePage() {
     }
     ctx.restore();
 
-    // Apply world transform
+    // World transform
     ctx.save();
     ctx.translate(cx + pan.x, cy + pan.y);
     ctx.scale(zoom, zoom);
 
-    // ── Depth-sorted render list ──────────────────────────────────────────
+    // Build render list
     type Item = { depth: number; draw: () => void };
     const list: Item[] = [];
 
@@ -576,44 +643,78 @@ export default function VersePage() {
     buildings.forEach(b => buildMap.set(`${b.q},${b.r}`, b));
 
     for (const tile of tiles) {
-      const { x, y } = iso(tile.q, tile.r);
-      const depth     = tile.q + tile.r;
-      const hovered   = hoveredCell?.q === tile.q && hoveredCell?.r === tile.r;
-      const selTile   = sel?.type === "tile" && sel.tile?.q === tile.q && sel.tile?.r === tile.r;
-      const bld       = buildMap.get(`${tile.q},${tile.r}`);
+      const { x, y } = isT
+        ? isoRotatedLerp(tile.q, tile.r, prevRotation, rot, rotProgress)
+        : isoRotated(tile.q, tile.r, rot);
 
-      // Tile
-      list.push({ depth: depth - 0.1, draw: () => drawTile(ctx, x, y, tile.biome, hovered, !!selTile, tick, tile) });
+      const { col: dc, row: dr } = applyRotation(tile.q, tile.r, rot);
+      const depth = dc + dr;
+      const fog   = 1 - Math.min(0.28, (depth / maxDepth) * 0.32);
 
-      // Building or decoration
+      const hovered = hoveredCell?.q === tile.q && hoveredCell?.r === tile.r;
+      const selTile = sel?.type === "tile" && sel.tile?.q === tile.q && sel.tile?.r === tile.r;
+      const bld     = buildMap.get(`${tile.q},${tile.r}`);
+
+      list.push({
+        depth: depth - 0.1,
+        draw: () => {
+          ctx.save(); ctx.globalAlpha *= fog;
+          drawTile(ctx, x, y, tile.biome, hovered, !!selTile, tick, tile, frame);
+          ctx.restore();
+        },
+      });
+
       if (bld) {
-        list.push({ depth: depth + 0.5, draw: () => drawBuilding(ctx, x, y, bld.type, tick, bld.builtAtTick) });
+        list.push({
+          depth: depth + 0.5,
+          draw: () => {
+            ctx.save(); ctx.globalAlpha *= fog;
+            drawBuildingShadow(ctx, x, y, bld.type);
+            drawBuilding(ctx, x, y, bld.type, tick, bld.builtAtTick);
+            ctx.restore();
+          },
+        });
       }
     }
 
-    // Agents at interpolated depth
     for (const agent of agents) {
       const eq = lerp(agent.fromQ, agent.toQ, easeIO(agent.moveProgress));
       const er = lerp(agent.fromR, agent.toR, easeIO(agent.moveProgress));
-      const { x, y } = iso(eq, er);
+
+      const { x, y } = isT
+        ? isoRotatedLerp(eq, er, prevRotation, rot, rotProgress)
+        : isoRotated(eq, er, rot);
+
+      const { col: dc, row: dr } = applyRotation(Math.round(eq), Math.round(er), rot);
+      const depth = dc + dr;
+      const fog   = 1 - Math.min(0.28, (depth / maxDepth) * 0.32);
+
       const isSel = sel?.type === "agent" && sel.agent?.tokenId === agent.tokenId;
-      list.push({ depth: eq + er + 0.3, draw: () => drawCharacter(ctx, x, y + TH / 2, agent, frame, isSel) });
+      list.push({
+        depth: depth + 0.3,
+        draw: () => {
+          ctx.save(); ctx.globalAlpha *= fog;
+          drawCharacter(ctx, x, y + TH / 2, agent, frame, isSel);
+          ctx.restore();
+        },
+      });
     }
 
-    // Sort back-to-front and draw
     list.sort((a, b) => a.depth - b.depth);
     for (const item of list) item.draw();
 
     ctx.restore();
 
-    // Particles in screen space (after restore)
+    // Particles (screen space)
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     for (const p of particles) {
       ctx.save();
-      ctx.globalAlpha = p.alpha;
-      ctx.fillStyle   = p.colour;
-      ctx.font        = "bold 10px sans-serif";
-      ctx.shadowColor = "#00000066"; ctx.shadowBlur = 4;
+      ctx.globalAlpha  = p.alpha;
+      ctx.shadowColor  = p.colour;
+      ctx.shadowBlur   = 8;
+      const scale = 0.7 + p.alpha * 0.3;
+      ctx.font      = `bold ${Math.round(10 * scale)}px sans-serif`;
+      ctx.fillStyle = p.colour;
       ctx.fillText(p.text, p.x, p.y);
       ctx.restore();
     }
@@ -624,10 +725,29 @@ export default function VersePage() {
     const delta = 16 / MOVE_MS;
     const s = stateRef.current;
     s.frame++;
+
+    // Rotation transition
+    if (s.rotProgress < 1) {
+      s.rotProgress = Math.min(1, s.rotProgress + 16 / 600);
+    }
+
+    // Camera inertia
+    if (Math.abs(s.velocity.x) > 0.1 || Math.abs(s.velocity.y) > 0.1) {
+      s.pan.x += s.velocity.x;
+      s.pan.y += s.velocity.y;
+      s.velocity.x *= 0.92;
+      s.velocity.y *= 0.92;
+    }
+
+    // Agent movement
     for (const a of s.agents) {
       if (a.moveProgress < 1) {
         a.moveProgress = Math.min(1, a.moveProgress + delta);
-        if (a.moveProgress >= 1) { a.q = a.toQ; a.r = a.toR; }
+        if (a.moveProgress >= 1) {
+          a.q = a.toQ;
+          a.r = a.toR;
+          a.arrivalFrame = s.frame;
+        }
       }
     }
   }, []);
@@ -673,7 +793,8 @@ export default function VersePage() {
         stateRef.current.tiles     = tiles ?? [];
         stateRef.current.buildings = buildings ?? [];
         stateRef.current.agents    = (agents ?? []).map((a: WorldAgent): AnimatedAgent => ({
-          ...a, history: [], fromQ: a.q, fromR: a.r, toQ: a.q, toR: a.r, moveProgress: 1,
+          ...a, history: [], fromQ: a.q, fromR: a.r, toQ: a.q, toR: a.r,
+          moveProgress: 1, arrivalFrame: -999,
         }));
         stateRef.current.ready = true;
         setAgentCount(agents?.length ?? 0);
@@ -691,7 +812,7 @@ export default function VersePage() {
     s.agents = s.agents.map(agent => {
       if (agent.moveProgress < 1) { agent.q = agent.toQ; agent.r = agent.toR; agent.moveProgress = 1; }
       const neighbors = getIsoNeighbors(agent.q, agent.r);
-      const idx = Math.floor(seededRandom(agent.tokenId * 1000 + s.tick * 137) * neighbors.length);
+      const idx  = Math.floor(seededRandom(agent.tokenId * 1000 + s.tick * 137) * neighbors.length);
       const { q: nq, r: nr } = neighbors[idx];
       const prevT = s.tiles.find(t => t.q === agent.q && t.r === agent.r);
       const nextT = s.tiles.find(t => t.q === nq && t.r === nr);
@@ -705,10 +826,14 @@ export default function VersePage() {
         action: `Moved to ${nextT?.biome ?? "unknown"} (${nq}, ${nr})`,
         energyDelta: ne - pe,
       };
-      return { ...agent, fromQ: agent.q, fromR: agent.r, toQ: nq, toR: nr, moveProgress: 0, energy: ne, knowledge: Math.min(100, agent.knowledge + kg), age: agent.age + 1, history: [entry, ...(agent.history ?? [])].slice(0, 30) };
+      return {
+        ...agent,
+        fromQ: agent.q, fromR: agent.r, toQ: nq, toR: nr, moveProgress: 0,
+        energy: ne, knowledge: Math.min(100, agent.knowledge + kg), age: agent.age + 1,
+        history: [entry, ...(agent.history ?? [])].slice(0, 30),
+      };
     });
 
-    // Building spawning + resource particles
     for (const ag of s.agents) {
       const tile = s.tiles.find(t => t.q === ag.toQ && t.r === ag.toR);
       if (!tile) continue;
@@ -718,7 +843,11 @@ export default function VersePage() {
         let type: BuildingType | null = null;
         if (same >= 5 && ag.personalityTag?.toLowerCase() === "builder") type = "hut";
         else if (same >= 10) type = (tile.biome === "forest" || tile.biome === "highlands") ? "farm" : "house";
-        if (type) { s.buildings.push({ q: ag.toQ, r: ag.toR, type, level: 1, builtAtTick: s.tick, ownerId: ag.tokenId }); setBuildingCount(s.buildings.length); spawnParticles(tile); }
+        if (type) {
+          s.buildings.push({ q: ag.toQ, r: ag.toR, type, level: 1, builtAtTick: s.tick, ownerId: ag.tokenId });
+          setBuildingCount(s.buildings.length);
+          spawnParticles(tile);
+        }
       } else spawnParticles(tile);
     }
 
@@ -738,28 +867,45 @@ export default function VersePage() {
 
     function onDown(e: MouseEvent) {
       const s = stateRef.current;
-      s.dragging  = true;
-      s.dragStart = { x: e.clientX - s.pan.x, y: e.clientY - s.pan.y };
+      s.dragging   = true;
+      s.dragStart  = { x: e.clientX - s.pan.x, y: e.clientY - s.pan.y };
+      s.lastMouse  = { x: e.clientX, y: e.clientY };
+      s.velocity   = { x: 0, y: 0 };
     }
     function onMove(e: MouseEvent) {
       const s = stateRef.current;
-      if (s.dragging) { s.pan.x = e.clientX - s.dragStart.x; s.pan.y = e.clientY - s.dragStart.y; return; }
-      const rect = el.getBoundingClientRect();
+      if (s.dragging) {
+        s.pan.x    = e.clientX - s.dragStart.x;
+        s.pan.y    = e.clientY - s.dragStart.y;
+        s.lastMouse = { x: e.clientX, y: e.clientY };
+        return;
+      }
+      const rect   = el.getBoundingClientRect();
       const { cx, cy } = center();
-      const { col, row } = mouseToGrid(e.clientX - rect.left, e.clientY - rect.top, s.pan.x, s.pan.y, s.zoom, cx, cy);
-      s.hoveredCell = (col >= 0 && col < WORLD_COLS && row >= 0 && row < WORLD_ROWS) ? { q: col, r: row } : null;
+      const raw    = mouseToGrid(e.clientX - rect.left, e.clientY - rect.top, s.pan.x, s.pan.y, s.zoom, cx, cy);
+      const world  = displayToWorld(raw.col, raw.row, s.rotation);
+      s.hoveredCell = (world.q >= 0 && world.q < WORLD_COLS && world.r >= 0 && world.r < WORLD_ROWS)
+        ? world : null;
     }
     function onUp(e: MouseEvent) {
       const s = stateRef.current;
       if (!s.dragging) return;
-      const dist = Math.hypot(e.clientX - (s.dragStart.x + s.pan.x), e.clientY - (s.dragStart.y + s.pan.y));
+      const dist = Math.hypot(
+        e.clientX - (s.dragStart.x + s.pan.x),
+        e.clientY - (s.dragStart.y + s.pan.y),
+      );
+      s.velocity = {
+        x: (e.clientX - s.lastMouse.x) * 0.5,
+        y: (e.clientY - s.lastMouse.y) * 0.5,
+      };
       s.dragging = false;
       if (dist < 5) {
-        const rect = el.getBoundingClientRect();
+        const rect  = el.getBoundingClientRect();
         const { cx, cy } = center();
-        const { col, row } = mouseToGrid(e.clientX - rect.left, e.clientY - rect.top, s.pan.x, s.pan.y, s.zoom, cx, cy);
-        const agent = s.agents.find(a => a.q === col && a.r === row);
-        const tile  = s.tiles.find(t => t.q === col && t.r === row);
+        const raw   = mouseToGrid(e.clientX - rect.left, e.clientY - rect.top, s.pan.x, s.pan.y, s.zoom, cx, cy);
+        const { q: wq, r: wr } = displayToWorld(raw.col, raw.row, s.rotation);
+        const agent = s.agents.find(a => a.q === wq && a.r === wr);
+        const tile  = s.tiles.find(t => t.q === wq && t.r === wr);
         if (agent) s.selected = { type: "agent", agent };
         else if (tile) s.selected = { type: "tile", tile };
         else s.selected = null;
@@ -772,28 +918,36 @@ export default function VersePage() {
       const f = e.deltaY < 0 ? 1.12 : 0.9;
       const rect = el.getBoundingClientRect();
       const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-      s.pan.x = mx - f * (mx - s.pan.x); s.pan.y = my - f * (my - s.pan.y);
+      s.pan.x = mx - f * (mx - s.pan.x);
+      s.pan.y = my - f * (my - s.pan.y);
       s.zoom  = Math.min(4, Math.max(0.25, s.zoom * f));
     }
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      if (target && target !== document.body && target.tagName !== "CANVAS") return;
+      if (e.key === "r" || e.key === "R") rotateView(e.shiftKey ? -1 : 1);
+      if (e.key === "e" || e.key === "E") rotateView(-1);
+    }
 
-    el.addEventListener("mousedown", onDown);
-    el.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup",   onUp);
-    el.addEventListener("wheel",     onWheel, { passive: false });
+    el.addEventListener("mousedown",  onDown);
+    el.addEventListener("mousemove",  onMove);
+    window.addEventListener("mouseup", onUp);
+    el.addEventListener("wheel",      onWheel, { passive: false });
+    window.addEventListener("keydown", onKey);
     return () => {
-      el.removeEventListener("mousedown", onDown);
-      el.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup",   onUp);
-      el.removeEventListener("wheel",     onWheel);
+      el.removeEventListener("mousedown",  onDown);
+      el.removeEventListener("mousemove",  onMove);
+      window.removeEventListener("mouseup", onUp);
+      el.removeEventListener("wheel",      onWheel);
+      window.removeEventListener("keydown", onKey);
     };
-  }, [center]);
+  }, [center, rotateView]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       {/* LBC-style top bar */}
       <header className="relative flex shrink-0 items-center gap-4 px-5 py-2.5 shadow-md"
               style={{ background: "linear-gradient(135deg,#ff8f00 0%,#ff6f00 50%,#e65100 100%)" }}>
-        {/* Decorative edge */}
         <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: "rgba(0,0,0,0.25)" }} />
         <Link href="/feed" className="text-xs font-semibold text-orange-100 hover:text-white transition-colors">
           ← AgentFeed
@@ -806,8 +960,8 @@ export default function VersePage() {
           </span>
         </div>
         <div className="ml-auto flex items-center gap-3">
-          <HudBubble icon="⏱️" value={String(epoch)} label="EPOCH" />
-          <HudBubble icon="👥" value={String(agentCount)} label="CITIZENS" />
+          <HudBubble icon="⏱️" value={String(epoch)}         label="EPOCH" />
+          <HudBubble icon="👥" value={String(agentCount)}    label="CITIZENS" />
           <HudBubble icon="🏘️" value={String(buildingCount)} label="BUILDINGS" accent />
         </div>
       </header>
@@ -823,9 +977,27 @@ export default function VersePage() {
             </div>
           )}
           <canvas ref={canvasRef} className="block w-full h-full" />
-          {/* Mini controls hint */}
+
+          {/* Rotation controls */}
+          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-2">
+            <button onClick={() => rotateView(-1)}
+              title="Rotate left (E)"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm hover:bg-black/50 transition-colors text-sm font-bold">
+              ◀
+            </button>
+            <span className="rounded-full bg-black/30 px-3 py-1 text-[10px] font-bold text-white/80 backdrop-blur-sm select-none min-w-[36px] text-center">
+              {["N","E","S","W"][rotation]}
+            </span>
+            <button onClick={() => rotateView(1)}
+              title="Rotate right (R)"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm hover:bg-black/50 transition-colors text-sm font-bold">
+              ▶
+            </button>
+          </div>
+
+          {/* Controls hint */}
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/30 px-4 py-1.5 text-[10px] font-medium text-white/80 backdrop-blur-sm">
-            Scroll to zoom · Drag to pan · Click citizen or tile
+            Scroll to zoom · Drag to pan · R/E to rotate · Click to inspect
           </div>
         </div>
 
@@ -847,7 +1019,7 @@ export default function VersePage() {
   );
 }
 
-// ── HUD bubble (top bar stat) ─────────────────────────────────────────────────
+// ── HUD bubble ─────────────────────────────────────────────────────────────────
 function HudBubble({ icon, value, label, accent }: { icon: string; value: string; label: string; accent?: boolean }) {
   return (
     <div className={`flex items-center gap-2 rounded-xl px-3 py-1.5 ${accent ? "bg-yellow-300/90" : "bg-white/20"}`}>
@@ -860,22 +1032,22 @@ function HudBubble({ icon, value, label, accent }: { icon: string; value: string
   );
 }
 
-// ── Agent panel (tabbed) ──────────────────────────────────────────────────────
+// ── Agent panel ───────────────────────────────────────────────────────────────
 type AgentTab = "overview" | "history" | "chain";
 
 function AgentPanel({ agent, onClose }: { agent: WorldAgent; onClose: () => void }) {
-  const [tab,         setTab]     = useState<AgentTab>("overview");
-  const [profile,     setProfile] = useState<AgentProfile | null>(null);
-  const [profLoading, setProf]    = useState(false);
+  const [tab,         setTab]  = useState<AgentTab>("overview");
+  const [profile,     setProf] = useState<AgentProfile | null>(null);
+  const [profLoading, setLoad] = useState(false);
   const tag    = agent.personalityTag?.toLowerCase() ?? "";
   const colour = TAG_CSS[tag] ?? DEFAULT_CSS;
 
   useEffect(() => {
-    setTab("overview"); setProfile(null); setProf(true);
+    setTab("overview"); setProf(null); setLoad(true);
     fetch(`/api/v1/agents/${agent.tokenId}/profile`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { setProfile(d); setProf(false); })
-      .catch(() => setProf(false));
+      .then(d => { setProf(d); setLoad(false); })
+      .catch(() => setLoad(false));
   }, [agent.tokenId]);
 
   const biome = (agent as WorldAgent & { history?: HistoryEntry[] }).history?.[0]?.biome ?? "—";
@@ -888,7 +1060,6 @@ function AgentPanel({ agent, onClose }: { agent: WorldAgent; onClose: () => void
           <button onClick={onClose} className="-mt-1 text-lg leading-none text-gray-400 hover:text-gray-700">×</button>
         </div>
         <div className="mb-4 flex items-center gap-3">
-          {/* Miniature character preview box */}
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl"
                style={{ background: `${colour}22`, border: `2px solid ${colour}55` }}>
             <CharacterPreview colour={colour} />
@@ -929,31 +1100,21 @@ function AgentPanel({ agent, onClose }: { agent: WorldAgent; onClose: () => void
   );
 }
 
-// SVG mini character for sidebar preview
 function CharacterPreview({ colour }: { colour: string }) {
   return (
     <svg width="32" height="42" viewBox="0 0 32 42" fill="none">
-      {/* Shoes */}
       <ellipse cx="11" cy="39" rx="5" ry="2.5" fill="#3e2723" />
       <ellipse cx="21" cy="39" rx="5" ry="2.5" fill="#3e2723" />
-      {/* Legs */}
-      <rect x="9" y="28" width="5" height="12" rx="2" fill="#37474f" />
+      <rect x="9"  y="28" width="5" height="12" rx="2" fill="#37474f" />
       <rect x="18" y="28" width="5" height="12" rx="2" fill="#37474f" />
-      {/* Body */}
-      <rect x="8" y="15" width="16" height="14" rx="3" fill={colour} stroke="#fff" strokeWidth="1.5" />
-      {/* Arms */}
-      <path d="M8 17 Q3 22 5 28" stroke={colour} strokeWidth="3.5" strokeLinecap="round" />
+      <rect x="8"  y="15" width="16" height="14" rx="3" fill={colour} stroke="#fff" strokeWidth="1.5" />
+      <path d="M8 17 Q3 22 5 28"  stroke={colour} strokeWidth="3.5" strokeLinecap="round" />
       <path d="M24 17 Q29 22 27 28" stroke={colour} strokeWidth="3.5" strokeLinecap="round" />
-      {/* Neck */}
       <rect x="13" y="11" width="6" height="5" fill="#ffcc80" />
-      {/* Head */}
       <circle cx="16" cy="9" r="8" fill="#ffcc80" stroke="#fff" strokeWidth="1.5" />
-      {/* Hair */}
       <path d="M8 9 A8 8 0 0 1 24 9 Z" fill={colour} />
-      {/* Eyes */}
       <circle cx="13" cy="9" r="1.5" fill="#1a1a1a" />
       <circle cx="19" cy="9" r="1.5" fill="#1a1a1a" />
-      {/* Smile */}
       <path d="M13 12 Q16 15 19 12" stroke="#c97030" strokeWidth="1" fill="none" />
     </svg>
   );
@@ -1039,7 +1200,6 @@ function ChainTab({ agent, profile, loading }: { agent: WorldAgent; profile: Age
 // ── Tile panel ────────────────────────────────────────────────────────────────
 function TilePanel({ tile, buildings, onClose }: { tile: WorldTile; buildings: Building[]; onClose: () => void }) {
   const bld = buildings.find(b => b.q === tile.q && b.r === tile.r);
-  const topColor = B_TOP[tile.biome] ?? "#ccc";
   return (
     <div className="flex flex-col gap-4 p-5">
       <div className="flex items-start justify-between">
@@ -1049,7 +1209,7 @@ function TilePanel({ tile, buildings, onClose }: { tile: WorldTile; buildings: B
         </div>
         <button onClick={onClose} className="text-lg leading-none text-gray-400 hover:text-gray-700">×</button>
       </div>
-      <div className="h-14 w-full rounded-2xl border" style={{ background: topColor, borderColor: B_STROKE[tile.biome] ?? "#888" }} />
+      <div className="h-14 w-full rounded-2xl border" style={{ background: B_TOP[tile.biome] ?? "#ccc", borderColor: B_STROKE[tile.biome] ?? "#888" }} />
       {bld && (
         <div className="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs" style={{ borderColor:"#e0e0e0" }}>
           <span className="text-lg">{BLDG_EMOJI[bld.type]}</span>
