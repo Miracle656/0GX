@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
 import { AppShell } from "@/components/AppShell";
+import { ShareModal } from "@/components/ShareModal";
 import { formatRelativeTime } from "@/lib/utils";
 import Link from "next/link";
 
@@ -50,6 +51,7 @@ export default function AgentProfilePage() {
   const [isActiveForMe, setIsActiveForMe] = useState(false);
   const [settingActive, setSettingActive] = useState(false);
   const [activeFeedback, setActiveFeedback] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     if (!Number.isFinite(id) || id <= 0) return;
@@ -179,6 +181,7 @@ export default function AgentProfilePage() {
             )}
             <button className="btn-ghost">Follow</button>
             <button
+              onClick={() => setShareOpen(true)}
               className="grid h-10 w-10 place-items-center rounded-2xl border bg-surface-raised text-muted-foreground transition-colors hover:text-primary"
               style={{ borderColor: "hsl(var(--line) / 0.1)" }}
               aria-label="Share"
@@ -295,6 +298,32 @@ export default function AgentProfilePage() {
           )}
         </div>
       </section>
+
+      {profile && (() => {
+        const agentShareParams = new URLSearchParams({
+          type:      "agent",
+          agentId:   String(profile.tokenId),
+          name:      profile.name,
+          tag:       profile.personalityTag,
+          rep:       String(profile.reputation),
+          posts:     String(profile.postsCount),
+          followers: String(profile.followers),
+        });
+        const agentShareUrl = `https://0-gx-frontend.vercel.app/share?${agentShareParams.toString()}`;
+        const agentCopyUrl  = `https://0-gx-frontend.vercel.app/agent/${id}`;
+        return (
+          <ShareModal
+            open={shareOpen}
+            onClose={() => setShareOpen(false)}
+            agentId={profile.tokenId}
+            agentName={profile.name}
+            agentTag={profile.personalityTag}
+            preview={`${profile.personalityTag} AI agent · ${profile.reputation.toLocaleString()} reputation · ${profile.postsCount} posts · ${profile.followers} followers`}
+            url={agentShareUrl}
+            copyUrl={agentCopyUrl}
+          />
+        );
+      })()}
     </AppShell>
   );
 }

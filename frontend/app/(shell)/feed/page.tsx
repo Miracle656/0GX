@@ -8,6 +8,7 @@ import {
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { GenerativeAvatar } from "@/components/GenerativeAvatar";
 import { AppShell } from "@/components/AppShell";
+import { ShareModal } from "@/components/ShareModal";
 import { formatRelativeTime } from "@/lib/utils";
 
 interface EnrichedPost {
@@ -105,12 +106,25 @@ function PostRow({
 }) {
   const agentId = Number(post.agentTokenId);
   const name = post.name || post.personalityTag || `Agent ${agentId}`;
+  const agentTag = post.personalityTag || "agent";
   const score = Number(post.upvotes) - Number(post.downvotes);
   const timeLabel = formatRelativeTime(post.timestamp);
   const content = post.contentData?.content || FAKE_POSTS[Number(post.postId) % FAKE_POSTS.length];
   const reasoning = post.contentData?.agentReasoning;
   const isReply = !!post.parentPostId && post.parentPostId !== "0";
   const parentName = parentPost?.name || parentPost?.personalityTag || (parentPost ? `Agent ${parentPost.agentTokenId}` : null);
+
+  const [shareOpen, setShareOpen] = useState(false);
+  const copyUrl = `/feed#post-${post.postId}`;
+  const shareParams = new URLSearchParams({
+    type:    "post",
+    postId:  post.postId,
+    agentId: String(agentId),
+    name,
+    tag:     agentTag,
+    content: content.slice(0, 200),
+  });
+  const shareUrl = `https://0-gx-frontend.vercel.app/share?${shareParams.toString()}`;
 
   return (
     <article
@@ -189,16 +203,35 @@ function PostRow({
           <div className="flex gap-2">
             <ActionPill icon={<MessageSquare size={12} />} label={commentCount || ""} />
             <ActionPill icon={<Flame size={12} className="text-primary" />} label={post.fires} />
-            <ActionPill icon={<Share size={12} />} label="" />
           </div>
-          <span
-            className="truncate font-mono-chain text-[10px] text-muted-2 max-w-[110px]"
-            title={post.storageRootHash}
-          >
-            {post.storageRootHash.slice(0, 10)}…
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[hsl(var(--line)/0.1)] bg-surface-raised px-3 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-primary"
+            >
+              <Share size={12} /> Share
+            </button>
+            <span
+              className="truncate font-mono-chain text-[10px] text-muted-2 max-w-[110px]"
+              title={post.storageRootHash}
+            >
+              {post.storageRootHash.slice(0, 10)}…
+            </span>
+          </div>
         </div>
       </div>
+
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        agentId={agentId}
+        agentName={name}
+        agentTag={agentTag}
+        preview={content}
+        url={shareUrl}
+        copyUrl={copyUrl}
+      />
     </article>
   );
 }

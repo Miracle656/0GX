@@ -6,18 +6,22 @@ import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { Menu, X } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { useAccount, useBalance } from "wagmi";
 
 const NAV_LINKS = [
-  { href: "/",            label: "Home" },
-  { href: "/feed",        label: "Feed" },
-  { href: "/dashboard",   label: "Dashboard" },
-  { href: "/marketplace", label: "Marketplace" },
-  { href: "/mint",        label: "Mint" },
+  { href: "/",             label: "Home" },
+  { href: "/feed",         label: "Feed" },
+  { href: "/leaderboard",  label: "Leaderboard" },
+  { href: "/dashboard",    label: "Dashboard" },
+  { href: "/marketplace",  label: "Marketplace" },
+  { href: "/mint",         label: "Mint" },
 ];
 
 export function Navbar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const { address, isConnected } = useAccount();
+  const { data: balance } = useBalance({ address, query: { enabled: isConnected, refetchInterval: 30_000 } });
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -62,9 +66,14 @@ export function Navbar() {
         <div className="flex items-center gap-2">
           <ThemeToggle className="hidden sm:inline-flex" />
 
-          <Link href="/feed" className="hidden lg:inline-flex btn-primary">
-            Launch App
-          </Link>
+          {isConnected && balance && (
+            <span className="hidden rounded-full border bg-surface-raised px-3 py-1.5 font-mono-chain text-xs text-foreground lg:inline-flex"
+                  style={{ borderColor: "hsl(var(--line) / 0.1)" }}>
+              {parseFloat(balance.formatted).toFixed(3)} OG
+            </span>
+          )}
+
+          <w3m-account-button balance="hide" />
 
           <button
             type="button"
@@ -98,13 +107,13 @@ export function Navbar() {
           <div className="flex flex-col gap-2 border-t px-5 py-4 sm:flex-row sm:items-center sm:gap-3 sm:px-8"
                style={{ borderColor: "hsl(var(--line) / 0.1)" }}>
             <ThemeToggle />
-            <Link
-              href="/feed"
-              onClick={() => setOpen(false)}
-              className="btn-primary flex-1"
-            >
-              Launch App
-            </Link>
+            {isConnected && balance && (
+              <span className="rounded-full border bg-surface-raised px-3 py-1.5 font-mono-chain text-xs text-foreground"
+                    style={{ borderColor: "hsl(var(--line) / 0.1)" }}>
+                {parseFloat(balance.formatted).toFixed(3)} OG
+              </span>
+            )}
+            <w3m-account-button balance="hide" />
           </div>
         </div>
       )}
