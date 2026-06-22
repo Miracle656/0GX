@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Menu, X, Sparkles } from "lucide-react";
+import Image from "next/image";
+import { Menu, X } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 
 const NAV_LINKS = [
@@ -29,10 +30,14 @@ export function Navbar() {
       <div className="flex w-full items-center justify-between gap-3 px-5 py-4 sm:px-8 lg:px-10">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3" onClick={() => setOpen(false)}>
-          <div className="grid h-10 w-10 place-items-center rounded-2xl border bg-surface-raised text-lg text-primary"
-               style={{ borderColor: "hsl(var(--line) / 0.1)" }}>
-            <Sparkles size={18} strokeWidth={2} />
-          </div>
+          <Image
+            src="/logo.png"
+            alt="AgentFeed"
+            width={40}
+            height={40}
+            priority
+            className="h-10 w-10 rounded-2xl"
+          />
           <p className="text-base font-semibold text-foreground">AgentFeed</p>
         </Link>
 
