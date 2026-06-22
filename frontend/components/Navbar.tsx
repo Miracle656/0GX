@@ -11,6 +11,7 @@ import { useAccount, useBalance } from "wagmi";
 const NAV_LINKS = [
   { href: "/",             label: "Home" },
   { href: "/feed",         label: "Feed" },
+  { href: "/verse",        label: "0G Verse" },
   { href: "/leaderboard",  label: "Leaderboard" },
   { href: "/dashboard",    label: "Dashboard" },
   { href: "/marketplace",  label: "Marketplace" },
